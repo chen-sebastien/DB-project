@@ -11,12 +11,36 @@
 
       <v-stepper-window>
         <v-stepper-window-item :value="1">
-          <div class="d-flex justify-space-between align-center mb-2">
-            <span class="text-subtitle-2 text-grey-darken-1">若為初次入住，請先建立資料</span>
-            <v-btn color="brown-darken-2" variant="outlined" size="small" rounded="pill" @click="showAddDialog = true">
-              <v-icon start>mdi-account-plus</v-icon> 新增飼主與寵物
-            </v-btn>
-          </div>
+          <v-alert
+            color="blue-lighten-5"
+            border="start"
+            border-color="blue-darken-2"
+            elevation="1"
+            class="mb-6 pa-4 rounded-lg"
+          >
+            <div class="d-flex align-center justify-space-between w-100 flex-wrap gap-4">
+              <div>
+                <div class="text-h6 font-weight-bold text-blue-darken-3 mb-1">
+                  <v-icon icon="mdi-information" class="mr-1 pb-1"></v-icon> 找不到寵物資料嗎？
+                </div>
+                <div class="text-body-2 text-blue-darken-2 font-weight-medium">
+                  若為初次入住的毛孩，請務必先點擊右方按鈕，建立完整的飼主與醫療史檔案！
+                </div>
+              </div>
+              <v-btn
+                color="blue-darken-3"
+                variant="elevated"
+                prepend-icon="mdi-paw"
+                class="font-weight-bold px-6"
+                size="large"
+                rounded="pill"
+                elevation="3"
+                @click="showAddDialog = true" 
+              >
+                🐾 新增飼主與寵物
+              </v-btn>
+            </div>
+          </v-alert>
 
           <v-select v-model="form.pet_id" :items="pets" item-title="display_name" item-value="id" label="請選擇入住寵物" required variant="outlined" color="orange-darken-2"></v-select>
           <v-text-field v-model="form.start_datetime" type="datetime-local" label="開始時間" required variant="outlined" color="orange-darken-2"></v-text-field>
@@ -114,7 +138,6 @@
 </template>
 
 <script setup lang="ts">
-// ✨ 引入 watch 魔法 ✨
 import { ref, reactive, onMounted, watch } from 'vue';
 import axios from 'axios';
 
@@ -131,14 +154,12 @@ const form = reactive({
 
 const pets = ref<any[]>([]);
 
-// 🌟 進階版：加上描述與圖示的房型資料
 const rooms = [
   { id: 1, room_type: 'S01 (小型犬)', desc: '溫馨單間，適合體型小於 10kg', icon: 'mdi-home-heart', color: 'orange-lighten-1' },
   { id: 3, room_type: 'M01 (中型犬)', desc: '寬敞空間，適合 10~20kg 之中型犬', icon: 'mdi-home-modern', color: 'green-lighten-1' },
   { id: 5, room_type: 'L01 (大型犬)', desc: '無障礙大房，適合 20kg 以上大狗狗', icon: 'mdi-home-city', color: 'blue-lighten-1' }
 ];
 
-// 🌟 進階版：圖文並茂的美容師資料
 const staffs = [
   { id: 1, name: 'Alice (店長)', icon: 'mdi-face-woman-shimmer', experience: '5 年', specialty: '大型犬安撫、高齡犬照護', color: 'pink-darken-1' },
   { id: 2, name: 'Bob (資深美容師)', icon: 'mdi-face-man-profile', experience: '3 年', specialty: '貓咪護理、特殊毛髮修剪', color: 'blue-darken-1' }
@@ -146,18 +167,15 @@ const staffs = [
 
 const snackbar = reactive({ show: false, message: '', color: 'error' });
 
-// ✨ 智慧配房邏輯：監聽選擇的寵物 ✨
 watch(() => form.pet_id, (newPetId) => {
   if (newPetId) {
     const selectedPet = pets.value.find(p => p.id === newPetId);
     if (selectedPet) {
-      // 根據寵物體積自動派發房間
-      if (selectedPet.size === 'Small') form.room_id = 1;      // 分配 S01
-      else if (selectedPet.size === 'Medium') form.room_id = 3; // 分配 M01
-      else if (selectedPet.size === 'Large') form.room_id = 5;  // 分配 L01
+      if (selectedPet.size === 'Small') form.room_id = 1;      
+      else if (selectedPet.size === 'Medium') form.room_id = 3; 
+      else if (selectedPet.size === 'Large') form.room_id = 5;  
     }
   } else {
-    // 如果取消選擇寵物，就清空房型
     form.room_id = null;
   }
 });

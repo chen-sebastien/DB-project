@@ -77,7 +77,17 @@
     </div>
     
     <v-card rounded="xl" elevation="2" class="mb-8 border" style="border-color: #D7CCC8 !important; overflow: hidden;">
-      <v-data-table :headers="headers" :items="reservations" item-value="id" :loading="loading" hover>
+      <v-data-table 
+        :headers="headers" 
+        :items="reservations" 
+        item-value="id" 
+        :loading="loading" 
+        hover 
+        height="350px" 
+        fixed-header 
+        items-per-page="-1"
+        :sort-by="[{ key: 'id', order: 'desc' }]"
+      >
         <template v-slot:item.pet_name="{ item }"><strong>{{ (item as any).pet_name }}</strong></template>
         <template v-slot:item.room_number="{ item }">{{ (item as any).room_number || '無' }}</template>
         <template v-slot:item.groomer_name="{ item }">{{ (item as any).groomer_name || '無' }}</template>
@@ -96,40 +106,57 @@
             </v-list>
           </v-menu>
         </template>
+        <template v-slot:bottom></template>
       </v-data-table>
     </v-card>
 
     <v-divider class="my-6"></v-divider>
-    <div class="d-flex justify-space-between align-center mb-4">
+    <div class="d-flex justify-space-between align-center mb-2">
       <div class="text-h5 font-weight-bold" style="color: #FF8F00;">
-        <v-icon icon="mdi-bone" color="orange-darken-2" class="mr-2"></v-icon>
-        今日餵食與照護任務
+        <v-icon icon="mdi-calendar-month" color="orange-darken-2" class="mr-2"></v-icon>
+        照護行事曆看板
       </div>
     </div>
 
-    <v-row>
-      <v-col v-if="feedingTasks.length === 0" cols="12" class="text-center text-grey my-4">目待處理的餵食任務喔！</v-col>
-      <v-col v-for="task in feedingTasks" :key="task.id" cols="12" md="6" xl="4">
-        <v-card :color="task.is_fed ? 'green-lighten-5' : 'orange-lighten-5'" elevation="2" rounded="xl" class="border" :style="task.is_fed ? 'border-color: #A5D6A7 !important;' : 'border-color: #FFCC80 !important;'">
-          <v-card-item>
-            <template v-slot:prepend><v-icon :icon="task.is_fed ? 'mdi-check-circle' : 'mdi-dog'" :color="task.is_fed ? 'green-darken-2' : 'brown-darken-2'" size="x-large"></v-icon></template>
-            <v-card-title class="font-weight-bold">{{ task.room_number || '未排房' }} - {{ task.pet_name }}</v-card-title>
-            <v-card-subtitle class="mt-1">⏰ 時間：{{ new Date(task.feeding_time).toLocaleString([], {hour: '2-digit', minute:'2-digit'}) }}</v-card-subtitle>
-          </v-card-item>
-          <v-card-text class="text-body-1 mt-2">
-            <v-alert v-if="task.medical_history" type="error" density="compact" variant="tonal" class="mb-2 font-weight-bold" icon="mdi-alert-octagon">醫療過敏：{{ task.medical_history }}</v-alert>
-            <v-alert v-if="task.notes" type="warning" density="compact" variant="tonal" class="mb-2 font-weight-bold" icon="mdi-alert-circle">特別交代：{{ task.notes }}</v-alert>
-            🍽️ <strong>餐點內容：</strong><br>{{ task.food_info }}
-          </v-card-text>
-          <v-card-actions>
-            <v-spacer></v-spacer>
-            <v-btn :color="task.is_fed ? 'green-darken-3' : 'deep-orange-darken-1'" :variant="task.is_fed ? 'outlined' : 'elevated'" rounded="pill" class="px-4 font-weight-bold" @click="toggleFeedStatus(task)">
-              {{ task.is_fed ? '✅ 已完成餵食' : '🍖 標記為已餵食' }}
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-col>
-    </v-row>
+    <div class="agenda-scroll-container pb-4">
+      <div v-if="groupedFeedingTasks.length === 0" class="text-center text-grey my-4">
+        目前沒有任何排程喔！
+      </div>
+
+      <template v-for="group in groupedFeedingTasks" :key="group.date">
+        <div class="d-flex align-center mt-6 mb-4">
+          <v-chip color="orange-darken-3" size="large" class="font-weight-bold text-h6 px-4" elevation="2">
+            {{ group.date }}
+          </v-chip>
+          <v-divider class="ml-4" color="orange-lighten-2" :thickness="2" style="opacity: 0.5;"></v-divider>
+        </div>
+
+        <v-row class="mb-2">
+          <v-col v-for="task in group.tasks" :key="task.id" cols="12" md="6" xl="4">
+            <v-card :color="task.is_fed ? 'green-lighten-5' : 'orange-lighten-5'" elevation="2" rounded="xl" class="border h-100 d-flex flex-column" :style="task.is_fed ? 'border-color: #A5D6A7 !important;' : 'border-color: #FFCC80 !important;'">
+              <v-card-item>
+                <template v-slot:prepend><v-icon :icon="task.is_fed ? 'mdi-check-circle' : 'mdi-dog'" :color="task.is_fed ? 'green-darken-2' : 'brown-darken-2'" size="x-large"></v-icon></template>
+                <v-card-title class="font-weight-bold">{{ task.room_number || '未排房' }} - {{ task.pet_name }}</v-card-title>
+                <v-card-subtitle class="mt-1">⏰ 時間：{{ new Date(task.feeding_time).toLocaleString([], {hour: '2-digit', minute:'2-digit'}) }}</v-card-subtitle>
+              </v-card-item>
+              
+              <v-card-text class="text-body-1 mt-2 flex-grow-1">
+                <v-alert v-if="task.medical_history" type="error" density="compact" variant="tonal" class="mb-2 font-weight-bold" icon="mdi-alert-octagon">醫療過敏：{{ task.medical_history }}</v-alert>
+                <v-alert v-if="task.notes" type="warning" density="compact" variant="tonal" class="mb-2 font-weight-bold" icon="mdi-alert-circle">特別交代：{{ task.notes }}</v-alert>
+                🍽️ <strong>餐點內容：</strong><br>{{ task.food_info }}
+              </v-card-text>
+              
+              <v-card-actions class="pa-4">
+                <v-spacer></v-spacer>
+                <v-btn :color="task.is_fed ? 'green-darken-3' : 'deep-orange-darken-1'" :variant="task.is_fed ? 'outlined' : 'elevated'" rounded="pill" class="px-4 font-weight-bold" @click="toggleFeedStatus(task)">
+                  {{ task.is_fed ? '✅ 已完成餵食' : '🍖 標記為已餵食' }}
+                </v-btn>
+              </v-card-actions>
+            </v-card>
+          </v-col>
+        </v-row>
+      </template>
+    </div>
   </v-container>
 </template>
 
@@ -177,11 +204,10 @@ const changeStatus = async (id: number, newStatus: string) => {
   }
 };
 
-// --- ✨ 數據看板邏輯 (已補齊 occupancy 初始架構) ✨ ---
 const stats = ref({
   statusStats: [] as any[],
   topGroomers: [] as any[],
-  occupancy: { occupied: 0, total: 0, rate: 0 } // 防止畫面初始渲染時找不到變數
+  occupancy: { occupied: 0, total: 0, rate: 0 }
 });
 
 const fetchStats = async () => {
@@ -207,7 +233,6 @@ const parsedStatusStats = computed(() => {
   return Object.values(defaultStats);
 });
 
-// --- 餵食任務邏輯 ---
 const feedingTasks = ref<any[]>([]);
 const fetchFeedingTasks = async () => {
   try {
@@ -217,6 +242,19 @@ const fetchFeedingTasks = async () => {
     console.error('Error fetching feeding tasks:', error);
   }
 };
+
+const groupedFeedingTasks = computed(() => {
+  const groups: Record<string, any[]> = {};
+  
+  feedingTasks.value.forEach(task => {
+    const dateObj = new Date(task.feeding_time);
+    const dateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+    if (!groups[dateStr]) groups[dateStr] = [];
+    groups[dateStr].push(task);
+  });
+
+  return Object.keys(groups).sort().map(date => ({ date: date, tasks: groups[date] }));
+});
 
 const toggleFeedStatus = async (task: any) => {
   try {
@@ -228,7 +266,6 @@ const toggleFeedStatus = async (task: any) => {
   }
 };
 
-// --- 生命週期統一更新 ---
 const refreshAllData = () => {
   fetchReservations();
   fetchFeedingTasks();
@@ -244,3 +281,28 @@ onUnmounted(() => {
   window.removeEventListener('reservation-created', refreshAllData);
 });
 </script>
+
+<style scoped>
+/* 專業級自訂捲軸樣式 */
+.agenda-scroll-container {
+  max-height: 500px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 12px;
+}
+
+.agenda-scroll-container::-webkit-scrollbar {
+  width: 8px;
+}
+.agenda-scroll-container::-webkit-scrollbar-track {
+  background: #FFF3E0; 
+  border-radius: 8px;
+}
+.agenda-scroll-container::-webkit-scrollbar-thumb {
+  background: #FFB74D; 
+  border-radius: 8px;
+}
+.agenda-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: #FF9800; 
+}
+</style>
