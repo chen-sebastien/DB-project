@@ -1,44 +1,110 @@
 <template>
   <v-container>
-    <v-stepper v-model="step">
+    <v-stepper v-model="step" rounded="xl" elevation="3" class="border" style="border-color: #FFCC80 !important;">
       <v-stepper-header>
-        <v-stepper-item :complete="step > 1" title="選擇日期區間" value="1"></v-stepper-item>
+        <v-stepper-item :complete="step > 1" title="選擇入住寵物與時間" :value="1" color="orange-darken-2"></v-stepper-item>
         <v-divider></v-divider>
-        <v-stepper-item :complete="step > 2" title="選擇資源" value="2"></v-stepper-item>
+        <v-stepper-item :complete="step > 2" title="智慧配房與資源" :value="2" color="orange-darken-2"></v-stepper-item>
         <v-divider></v-divider>
-        <v-stepper-item title="確認預約" value="3"></v-stepper-item>
+        <v-stepper-item title="確認預約" :value="3" color="orange-darken-2"></v-stepper-item>
       </v-stepper-header>
 
       <v-stepper-window>
-        <v-stepper-window-item value="1">
-          <v-text-field v-model="form.start_datetime" type="datetime-local" label="開始時間" required></v-text-field>
-          <v-text-field v-model="form.end_datetime" type="datetime-local" label="結束時間" required></v-text-field>
-          <v-btn color="primary" @click="step = 2">下一步</v-btn>
+        <v-stepper-window-item :value="1">
+          <div class="d-flex justify-space-between align-center mb-2">
+            <span class="text-subtitle-2 text-grey-darken-1">若為初次入住，請先建立資料</span>
+            <v-btn color="brown-darken-2" variant="outlined" size="small" rounded="pill" @click="showAddDialog = true">
+              <v-icon start>mdi-account-plus</v-icon> 新增飼主與寵物
+            </v-btn>
+          </div>
+
+          <v-select v-model="form.pet_id" :items="pets" item-title="display_name" item-value="id" label="請選擇入住寵物" required variant="outlined" color="orange-darken-2"></v-select>
+          <v-text-field v-model="form.start_datetime" type="datetime-local" label="開始時間" required variant="outlined" color="orange-darken-2"></v-text-field>
+          <v-text-field v-model="form.end_datetime" type="datetime-local" label="結束時間" required variant="outlined" color="orange-darken-2"></v-text-field>
+          
+          <v-btn color="orange-darken-2" rounded="pill" class="px-6 font-weight-bold" @click="step = 2" :disabled="!form.pet_id || !form.start_datetime || !form.end_datetime">下一步</v-btn>
         </v-stepper-window-item>
 
-        <v-stepper-window-item value="2">
-          <v-select v-model="form.room_id" :items="rooms" item-title="room_type" item-value="id" label="選擇房型 (選填)" clearable></v-select>
-          <v-select v-model="form.staff_id" :items="staffs" item-title="name" item-value="id" label="選擇美容師 (選填)" clearable></v-select>
-          <v-btn variant="text" @click="step = 1" class="mr-2">上一步</v-btn>
-          <v-btn color="primary" @click="step = 3">下一步</v-btn>
+        <v-stepper-window-item :value="2">
+          <v-alert type="info" variant="tonal" density="compact" class="mb-4" icon="mdi-magic-staff">
+            系統已根據毛孩體型為您自動推薦合適房型！您也可以手動更改。
+          </v-alert>
+
+          <v-select v-model="form.room_id" :items="rooms" item-title="room_type" item-value="id" label="選擇房型" clearable variant="outlined" color="orange-darken-2">
+            <template v-slot:item="{ props, item }">
+              <v-list-item v-bind="props" :title="item.title" :subtitle="item.raw.desc">
+                <template v-slot:prepend>
+                  <v-icon :color="item.raw.color" class="mr-3" size="large">{{ item.raw.icon }}</v-icon>
+                </template>
+              </v-list-item>
+            </template>
+          </v-select>
+
+          <v-select v-model="form.staff_id" :items="staffs" item-title="name" item-value="id" label="選擇專屬美容師 (選填)" clearable variant="outlined" color="orange-darken-2">
+            <template v-slot:selection="{ item }">
+              <v-chip :color="item.raw.color" size="small" class="font-weight-bold text-white">
+                <v-icon start>{{ item.raw.icon }}</v-icon>
+                {{ item.title }}
+              </v-chip>
+            </template>
+            <template v-slot:item="{ props, item }">
+              <v-list-item v-bind="props" :title="item.title" :subtitle="`⭐ 資歷：${item.raw.experience} | ✂️ 專長：${item.raw.specialty}`">
+                <template v-slot:prepend>
+                  <v-avatar :color="item.raw.color" size="36" class="text-white mr-3">
+                    <v-icon>{{ item.raw.icon }}</v-icon>
+                  </v-avatar>
+                </template>
+              </v-list-item>
+            </template>
+          </v-select>
+
+          <v-btn variant="text" rounded="pill" @click="step = 1" class="mr-2">上一步</v-btn>
+          <v-btn color="orange-darken-2" rounded="pill" class="px-6 font-weight-bold" @click="step = 3">下一步</v-btn>
         </v-stepper-window-item>
 
-        <v-stepper-window-item value="3">
+        <v-stepper-window-item :value="3">
           <v-card flat>
-            <v-card-text>
-              <div class="text-subtitle-1">時間：{{ form.start_datetime }} ~ {{ form.end_datetime }}</div>
-              <div class="text-subtitle-1">資源：房間 ID {{ form.room_id || '無' }} / 美容師 ID {{ form.staff_id || '無' }}</div>
+            <v-card-text class="text-body-1">
+              <div class="mb-2">🐾 <strong>入住寵物：</strong>{{ getSelectedPetName() }}</div>
+              <div class="mb-2">⏰ <strong>預約時間：</strong>{{ form.start_datetime?.replace('T', ' ') }} ~ {{ form.end_datetime?.replace('T', ' ') }}</div>
+              <div class="mb-2">🏠 <strong>預約資源：</strong>房間 ID {{ form.room_id || '無' }} / 美容師 ID {{ form.staff_id || '無' }}</div>
             </v-card-text>
             <v-card-actions>
-              <v-btn variant="text" @click="step = 2" class="mr-2">上一步</v-btn>
-              <v-btn color="success" :loading="loading" @click="submitReservation">確認送出</v-btn>
+              <v-btn variant="text" rounded="pill" @click="step = 2" class="mr-2">上一步</v-btn>
+              <v-btn color="green-darken-2" rounded="pill" class="px-6 font-weight-bold" elevation="2" :loading="loading" @click="submitReservation">✨ 確認送出</v-btn>
             </v-card-actions>
           </v-card>
         </v-stepper-window-item>
       </v-stepper-window>
     </v-stepper>
 
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="4000" location="top">
+    <v-dialog v-model="showAddDialog" max-width="600" persistent>
+      <v-card rounded="xl">
+        <v-card-title class="bg-orange-lighten-4 text-brown-darken-4 font-weight-bold py-3">
+          <v-icon icon="mdi-card-account-details" class="mr-2"></v-icon>新增顧客與寵物資料
+        </v-card-title>
+        <v-card-text class="pt-4">
+          <v-row>
+            <v-col cols="12" md="6"><v-text-field v-model="newPetForm.owner_name" label="飼主姓名" variant="outlined" color="orange-darken-2" prepend-inner-icon="mdi-account" hide-details class="mb-2"></v-text-field></v-col>
+            <v-col cols="12" md="6"><v-text-field v-model="newPetForm.phone" label="聯絡電話" variant="outlined" color="orange-darken-2" prepend-inner-icon="mdi-phone" placeholder="例如: 0912345678" hide-details class="mb-2"></v-text-field></v-col>
+          </v-row>
+          <v-divider class="my-3"></v-divider>
+          <v-row>
+            <v-col cols="12" md="6"><v-text-field v-model="newPetForm.pet_name" label="寵物名字" variant="outlined" color="orange-darken-2" prepend-inner-icon="mdi-dog" hide-details class="mb-2"></v-text-field></v-col>
+            <v-col cols="12" md="6"><v-select v-model="newPetForm.size" :items="['Small', 'Medium', 'Large']" label="寵物體型" variant="outlined" color="orange-darken-2" prepend-inner-icon="mdi-scale-balance" hide-details class="mb-2"></v-select></v-col>
+          </v-row>
+          <v-textarea v-model="newPetForm.medical_history" label="醫療與過敏史 (選填)" variant="outlined" color="red-darken-2" prepend-inner-icon="mdi-medical-bag" rows="2" auto-grow placeholder="例如：對雞肉過敏、有心臟病..." class="mt-4" hide-details></v-textarea>
+          <v-textarea v-model="newPetForm.notes" label="特別交代備註 (選填)" variant="outlined" color="orange-darken-2" prepend-inner-icon="mdi-note-edit" rows="2" auto-grow placeholder="例如：很怕雷聲、洗澡需戴頭套..." class="mt-4" hide-details></v-textarea>
+        </v-card-text>
+        <v-card-actions class="pb-4 px-4 pt-4">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" rounded="pill" @click="showAddDialog = false">取消</v-btn>
+          <v-btn color="orange-darken-2" variant="elevated" rounded="pill" class="px-6 font-weight-bold" :loading="isAdding" @click="submitNewPet">確認建檔</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="4000" location="top" rounded="pill">
       {{ snackbar.message }}
       <template v-slot:actions>
         <v-btn variant="text" @click="snackbar.show = false">關閉</v-btn>
@@ -48,41 +114,102 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue';
+// ✨ 引入 watch 魔法 ✨
+import { ref, reactive, onMounted, watch } from 'vue';
 import axios from 'axios';
 
 const step = ref(1);
 const loading = ref(false);
 
 const form = reactive({
-  pet_id: 1, // 預設使用 ID 1 的寵物
-  room_id: null,
-  staff_id: null,
+  pet_id: null as number | null, 
+  room_id: null as number | null,
+  staff_id: null as number | null,
   start_datetime: '',
   end_datetime: ''
 });
 
-// 假資料，實務上可從 GET /api/rooms 等 API 取得
-const rooms = [{ id: 1, room_type: 'Standard' }, { id: 2, room_type: 'Deluxe' }];
-const staffs = [{ id: 1, name: 'Alice Groomer' }, { id: 2, name: 'Bob Groomer' }];
+const pets = ref<any[]>([]);
+
+// 🌟 進階版：加上描述與圖示的房型資料
+const rooms = [
+  { id: 1, room_type: 'S01 (小型犬)', desc: '溫馨單間，適合體型小於 10kg', icon: 'mdi-home-heart', color: 'orange-lighten-1' },
+  { id: 3, room_type: 'M01 (中型犬)', desc: '寬敞空間，適合 10~20kg 之中型犬', icon: 'mdi-home-modern', color: 'green-lighten-1' },
+  { id: 5, room_type: 'L01 (大型犬)', desc: '無障礙大房，適合 20kg 以上大狗狗', icon: 'mdi-home-city', color: 'blue-lighten-1' }
+];
+
+// 🌟 進階版：圖文並茂的美容師資料
+const staffs = [
+  { id: 1, name: 'Alice (店長)', icon: 'mdi-face-woman-shimmer', experience: '5 年', specialty: '大型犬安撫、高齡犬照護', color: 'pink-darken-1' },
+  { id: 2, name: 'Bob (資深美容師)', icon: 'mdi-face-man-profile', experience: '3 年', specialty: '貓咪護理、特殊毛髮修剪', color: 'blue-darken-1' }
+];
 
 const snackbar = reactive({ show: false, message: '', color: 'error' });
+
+// ✨ 智慧配房邏輯：監聽選擇的寵物 ✨
+watch(() => form.pet_id, (newPetId) => {
+  if (newPetId) {
+    const selectedPet = pets.value.find(p => p.id === newPetId);
+    if (selectedPet) {
+      // 根據寵物體積自動派發房間
+      if (selectedPet.size === 'Small') form.room_id = 1;      // 分配 S01
+      else if (selectedPet.size === 'Medium') form.room_id = 3; // 分配 M01
+      else if (selectedPet.size === 'Large') form.room_id = 5;  // 分配 L01
+    }
+  } else {
+    // 如果取消選擇寵物，就清空房型
+    form.room_id = null;
+  }
+});
+
+const showAddDialog = ref(false);
+const isAdding = ref(false);
+
+const newPetForm = reactive({
+  owner_name: '', phone: '', pet_name: '', size: 'Small', medical_history: '', notes: ''
+});
+
+const submitNewPet = async () => {
+  if (!newPetForm.owner_name || !newPetForm.phone || !newPetForm.pet_name || !newPetForm.size) {
+    snackbar.color = 'warning'; snackbar.message = '請填寫所有必填欄位喔！'; snackbar.show = true; return;
+  }
+  isAdding.value = true;
+  try {
+    await axios.post('http://localhost:3000/api/reservations/pets', newPetForm);
+    showAddDialog.value = false; snackbar.color = 'success'; snackbar.message = '資料建檔成功！'; snackbar.show = true;
+    newPetForm.owner_name = ''; newPetForm.phone = ''; newPetForm.pet_name = ''; newPetForm.size = 'Small'; newPetForm.medical_history = ''; newPetForm.notes = '';
+    await fetchPets();
+  } catch (error: any) {
+    snackbar.color = 'error'; snackbar.message = error.response?.data?.error || '建檔失敗，請確認資料是否正確。'; snackbar.show = true;
+  } finally {
+    isAdding.value = false;
+  }
+};
+
+const fetchPets = async () => {
+  try {
+    const response = await axios.get('http://localhost:3000/api/reservations/pets');
+    pets.value = response.data.map((pet: any) => ({
+      ...pet,
+      display_name: `${pet.pet_name} (飼主: ${pet.owner_name} - ${pet.size === 'Small' ? '小型犬' : (pet.size === 'Medium' ? '中型犬' : '大型犬')})`
+    }));
+  } catch (error) {
+    console.error('抓取寵物資料失敗:', error);
+  }
+};
+
+const getSelectedPetName = () => {
+  if (!form.pet_id) return '未選擇';
+  const pet = pets.value.find(p => p.id === form.pet_id);
+  return pet ? pet.display_name : '未知寵物';
+};
 
 const submitReservation = async () => {
   loading.value = true;
   try {
-    const response = await axios.post('/api/reservations', form);
-    snackbar.color = 'success';
-    snackbar.message = '預約成功！';
-    snackbar.show = true;
-    step.value = 1;
-    // 成功後清空表單
-    form.room_id = null;
-    form.staff_id = null;
-    form.start_datetime = '';
-    form.end_datetime = '';
-    
-    // 觸發自定義事件通知 Dashboard 更新 (此處簡化處理)
+    await axios.post('http://localhost:3000/api/reservations', form);
+    snackbar.color = 'success'; snackbar.message = '預約成功！'; snackbar.show = true; step.value = 1;
+    form.pet_id = null; form.room_id = null; form.staff_id = null; form.start_datetime = ''; form.end_datetime = '';
     window.dispatchEvent(new Event('reservation-created'));
   } catch (error: any) {
     snackbar.color = 'error';
@@ -96,4 +223,8 @@ const submitReservation = async () => {
     loading.value = false;
   }
 };
+
+onMounted(() => {
+  fetchPets();
+});
 </script>
