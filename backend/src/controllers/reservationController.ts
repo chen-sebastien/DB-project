@@ -13,77 +13,101 @@ export const createReservation = async (req: Request, res: Response) => {
         return res.status(400).json({ error: 'start_datetime must be earlier than end_datetime' });
     }
 
-    // 依據討論，預約房間或美容師為獨立資源，但至少須擇一
     if (!room_id && !staff_id) {
         return res.status(400).json({ error: 'Must select at least one resource (room or staff)' });
     }
 
     try {
+        // 🚨 終極保險 1：將前端傳來的字串 ID 強制轉為「數字」，避免資料庫配對失效
+        const safeRoomId = room_id ? Number(room_id) : null;
+        const safeStaffId = staff_id ? Number(staff_id) : null;
+
+        // 🚨 終極保險 2：在 Node.js 端手動清洗時間格式，確保 MySQL 絕對能辨識
+        const formatDateTime = (dt: string) => {
+            let formatted = dt.replace('T', ' ');
+            if (formatted.length === 16) formatted += ':00';
+            return formatted;
+        };
+        const safeStart = formatDateTime(start_datetime);
+        const safeEnd = formatDateTime(end_datetime);
+
         // 衝堂檢核核心邏輯
         const overlapQuery = `
-            SELECT id FROM reservations 
+            SELECT 
+                res.room_id, r.room_number,
+                res.groomer_id, g.name AS groomer_name
+            FROM reservations res
+            LEFT JOIN rooms r ON res.room_id = r.id
+            LEFT JOIN groomers g ON res.groomer_id = g.id
             WHERE 
-                status != 'Cancelled' AND
+                res.status IN ('Confirmed', 'Completed') AND
                 (
-                    (room_id IS NOT NULL AND room_id = ?) OR 
-                    (groomer_id IS NOT NULL AND groomer_id = ?)
+                    (res.room_id IS NOT NULL AND res.room_id = ?) OR 
+                    (res.groomer_id IS NOT NULL AND res.groomer_id = ?)
                 ) AND 
-                start_time < ? AND 
-                end_time > ?
+                res.start_time < ? AND 
+                res.end_time > ?
             LIMIT 1;
         `;
 
-        const [conflictRows] = await pool.execute<RowDataPacket[]>(overlapQuery, [
-            room_id || null, 
-            staff_id || null, 
-            end_datetime, 
-            start_datetime
+        // 傳入安全的數字與乾淨的時間字串
+        const [conflictRows]: any = await pool.execute(overlapQuery, [
+            safeRoomId, 
+            safeStaffId, 
+            safeEnd, 
+            safeStart
         ]);
 
         if (conflictRows.length > 0) {
+            const conflict = conflictRows[0];
+            let conflictMessage = '此時段資源已被佔用，請選擇其他時段或資源。';
+            
+            // ✨ 終極保險 3：使用寬鬆比對 (==) 或是直接拿 safeRoomId 比對，確保對話框能正確顯示 ✨
+            if (safeRoomId && conflict.room_id === safeRoomId) {
+                conflictMessage = `⚠️ 衝堂阻擋：您選擇的房間【${conflict.room_number || '未知'}】在該時段已被預約！`;
+            } else if (safeStaffId && conflict.groomer_id === safeStaffId) {
+                conflictMessage = `⚠️ 衝堂阻擋：美容師【${conflict.groomer_name || '未知'}】在該時段已有排程！`;
+            }
+
             return res.status(409).json({ 
                 error: 'Conflict', 
-                message: '此時段資源已被佔用，請選擇其他時段或資源。' 
+                message: conflictMessage 
             });
         }
 
-        // 新增預約
-        // ... (前面原本的新增預約程式碼保留) ...
+        // 新增預約 (寫入安全的格式)
         const insertQuery = `
             INSERT INTO reservations (pet_id, room_id, groomer_id, start_time, end_time, status)
             VALUES (?, ?, ?, ?, ?, 'Confirmed');
         `;
         
-        const [insertResult] = await pool.execute<ResultSetHeader>(insertQuery, [
+        const [insertResult]: any = await pool.execute(insertQuery, [
             pet_id,
-            room_id || null,
-            staff_id || null,
-            start_datetime,
-            end_datetime
+            safeRoomId,
+            safeStaffId,
+            safeStart,
+            safeEnd
         ]);
 
-        // ✨ 這裡開始是新加的：自動產生一筆預設的餵食任務 ✨
-        // 假設預設在入住時間的同一天發送餵食任務
         const newReservationId = insertResult.insertId;
+
+        // ✨ 自動產生一筆預設的餵食任務 ✨
         const insertFeedingQuery = `
             INSERT INTO feeding_tasks (reservation_id, feeding_time, food_info, is_fed)
             VALUES (?, ?, '系統預設：入住乾糧一份 (可由後台修改)', 0);
         `;
-        await pool.execute(insertFeedingQuery, [newReservationId, start_datetime]);
-        // ✨ 新加區塊結束 ✨
+        await pool.execute(insertFeedingQuery, [newReservationId, safeStart]);
 
         return res.status(201).json({ 
             message: 'Reservation created successfully',
             reservation_id: newReservationId 
         });
-        // ... (後面的 catch 保留) ...
 
     } catch (error) {
         console.error('Error creating reservation:', error);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 };
-
 // 取得所有預約紀錄 (進階版：將 ID 替換成真實名稱)
 export const getReservations = async (req: Request, res: Response) => {
     try {
@@ -128,7 +152,7 @@ export const getPets = async (req: Request, res: Response) => {
 
 // --- 餵食清單相關 API ---
 
-// --- 取得餵食清單 (進階版：利用 JOIN 撈出寵物的過敏史與備註) ---
+// --- 取得餵食清單 (修復版：過濾掉已取消的訂單) ---
 export const getFeedingTasks = async (req: Request, res: Response) => {
     try {
         const query = `
@@ -142,6 +166,7 @@ export const getFeedingTasks = async (req: Request, res: Response) => {
             JOIN reservations res ON f.reservation_id = res.id
             JOIN pets p ON res.pet_id = p.id
             LEFT JOIN rooms r ON res.room_id = r.id
+            WHERE UPPER(res.status) != 'CANCELLED'  /* ✨ 關鍵修復：把取消的訂單任務隱藏起來 */
             ORDER BY f.feeding_time ASC;
         `;
         const [rows] = await pool.execute(query);
