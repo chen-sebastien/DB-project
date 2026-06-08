@@ -1,5 +1,4 @@
-﻿import { Router } from 'express';
-// 記得把 getDashboardStats 加進來
+import { Router } from 'express';
 import {
     createReservation,
     getReservations,
@@ -8,25 +7,29 @@ import {
     updateFeedingStatus,
     createPetWithOwner,
     updateReservationStatus,
-    getDashboardStats // ✨ 新增這行
+    getDashboardStats
 } from '../controllers/reservationController';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
 
+// 保護所有 API：存取以下所有端點均需登入 JWT Token 驗證
+router.use(authenticateToken as any);
+
 // 預約相關
-router.post('/', createReservation);
-router.get('/', getReservations);
-router.patch('/:id/status', updateReservationStatus);
+router.post('/', createReservation as any);
+router.get('/', getReservations as any);
+router.patch('/:id/status', updateReservationStatus as any);
 
 // 營運統計相關
-router.get('/stats', getDashboardStats); // ✨ 新增這行：用來抓取看板數據
+router.get('/stats', getDashboardStats as any);
 
 // 寵物相關
-router.get('/pets', getPets);
-router.post('/pets', createPetWithOwner);
+router.get('/pets', getPets as any);
+router.post('/pets', createPetWithOwner as any);
 
 // 餵食清單相關
-router.get('/feeding', getFeedingTasks);
-router.patch('/feeding/:id', updateFeedingStatus);
+router.get('/feeding', getFeedingTasks as any);
+router.patch('/feeding/:id', updateFeedingStatus as any);
 
 export default router;

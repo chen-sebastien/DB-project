@@ -1,8 +1,9 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import pool from '../db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { AuthenticatedRequest } from '../middleware/auth';
 
-export const createReservation = async (req: Request, res: Response) => {
+export const createReservation = async (req: AuthenticatedRequest, res: Response) => {
     const { pet_id, room_id, staff_id, start_datetime, end_datetime } = req.body;
 
     if (!start_datetime || !end_datetime || !pet_id) {
@@ -18,6 +19,31 @@ export const createReservation = async (req: Request, res: Response) => {
     }
 
     try {
+        // 🚨 營業時間防呆校驗
+        const [settingsRows] = await pool.execute<RowDataPacket[]>('SELECT * FROM settings');
+        const settingsMap: Record<string, string> = {};
+        settingsRows.forEach(row => { settingsMap[row.key] = row.value; });
+        
+        const businessStart = settingsMap['business_start_time'] || '09:00';
+        const businessEnd = settingsMap['business_end_time'] || '21:00';
+
+        // 取得時間之 HH:MM 格式字串，用來比對營業時間
+        const getHourMinuteStr = (dateStr: string) => {
+            const date = new Date(dateStr);
+            const pad = (n: number) => String(n).padStart(2, '0');
+            return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        };
+
+        const startHM = getHourMinuteStr(start_datetime);
+        const endHM = getHourMinuteStr(end_datetime);
+
+        if (startHM < businessStart || endHM > businessEnd) {
+            return res.status(400).json({ 
+                error: 'BusinessHoursConflict', 
+                message: `⚠️ 預約時間不在營業時間內！本店營業時間為 ${businessStart} 至 ${businessEnd}，請重新調整。` 
+            });
+        }
+
         // 🚨 終極保險 1：將前端傳來的字串 ID 強制轉為「數字」，避免資料庫配對失效
         const safeRoomId = room_id ? Number(room_id) : null;
         const safeStaffId = staff_id ? Number(staff_id) : null;
@@ -98,6 +124,18 @@ export const createReservation = async (req: Request, res: Response) => {
         `;
         await pool.execute(insertFeedingQuery, [newReservationId, safeStart]);
 
+        // 記錄此操作到日誌中
+        const employeeId = req.user?.id || null;
+        const employeeName = req.user?.name || '未知員工';
+        await pool.execute(
+            'INSERT INTO audit_logs (employee_id, action, details) VALUES (?, ?, ?)',
+            [
+                employeeId,
+                'CREATE_RESERVATION',
+                `員工【${employeeName}】新增了預約（ID: ${newReservationId}，寵物 ID: ${pet_id}）`
+            ]
+        );
+
         return res.status(201).json({ 
             message: 'Reservation created successfully',
             reservation_id: newReservationId 
@@ -108,8 +146,9 @@ export const createReservation = async (req: Request, res: Response) => {
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 };
+
 // 取得所有預約紀錄 (進階版：將 ID 替換成真實名稱)
-export const getReservations = async (req: Request, res: Response) => {
+export const getReservations = async (req: AuthenticatedRequest, res: Response) => {
     try {
         const query = `
             SELECT 
@@ -135,7 +174,7 @@ export const getReservations = async (req: Request, res: Response) => {
 };
 
 // 撈取寵物與對應的飼主資料 (展示 JOIN 的威力)
-export const getPets = async (req: Request, res: Response) => {
+export const getPets = async (req: AuthenticatedRequest, res: Response) => {
     try {
         const query = `
             SELECT p.id, p.name AS pet_name, p.size, o.name AS owner_name 
@@ -150,10 +189,8 @@ export const getPets = async (req: Request, res: Response) => {
     }
 };
 
-// --- 餵食清單相關 API ---
-
 // --- 取得餵食清單 (修復版：過濾掉已取消的訂單) ---
-export const getFeedingTasks = async (req: Request, res: Response) => {
+export const getFeedingTasks = async (req: AuthenticatedRequest, res: Response) => {
     try {
         const query = `
             SELECT 
@@ -166,7 +203,7 @@ export const getFeedingTasks = async (req: Request, res: Response) => {
             JOIN reservations res ON f.reservation_id = res.id
             JOIN pets p ON res.pet_id = p.id
             LEFT JOIN rooms r ON res.room_id = r.id
-            WHERE UPPER(res.status) != 'CANCELLED'  /* ✨ 關鍵修復：把取消的訂單任務隱藏起來 */
+            WHERE UPPER(res.status) != 'CANCELLED'
             ORDER BY f.feeding_time ASC;
         `;
         const [rows] = await pool.execute(query);
@@ -177,15 +214,27 @@ export const getFeedingTasks = async (req: Request, res: Response) => {
     }
 };
 
-// 2. 更新餵食狀態 (打勾/取消打勾)
-export const updateFeedingStatus = async (req: Request, res: Response) => {
-    const { id } = req.params; // 從網址抓取任務 ID
-    const { is_fed } = req.body; // 從前端傳來的狀態 (true/false)
+// 更新餵食狀態 (打勾/取消打勾)
+export const updateFeedingStatus = async (req: AuthenticatedRequest, res: Response) => {
+    const { id } = req.params;
+    const { is_fed } = req.body;
 
     try {
-        // MySQL 裡 boolean 通常存成 1 或 0
         const fedStatus = is_fed ? 1 : 0; 
         await pool.execute('UPDATE feeding_tasks SET is_fed = ? WHERE id = ?', [fedStatus, id]);
+
+        // 記錄到日誌
+        const employeeId = req.user?.id || null;
+        const employeeName = req.user?.name || '未知員工';
+        await pool.execute(
+            'INSERT INTO audit_logs (employee_id, action, details) VALUES (?, ?, ?)',
+            [
+                employeeId,
+                'UPDATE_FEEDING_STATUS',
+                `員工【${employeeName}】更動了任務 ID: ${id} 的餵食狀態為【${is_fed ? '已餵食' : '未餵食'}】`
+            ]
+        );
+
         return res.json({ success: true, message: '狀態更新成功' });
     } catch (error) {
         console.error('Error updating feeding status:', error);
@@ -194,8 +243,7 @@ export const updateFeedingStatus = async (req: Request, res: Response) => {
 };
 
 // --- 顧客與寵物建檔 API ---
-export const createPetWithOwner = async (req: Request, res: Response) => {
-    // 增加接收 medical_history 和 notes
+export const createPetWithOwner = async (req: AuthenticatedRequest, res: Response) => {
     const { owner_name, phone, pet_name, size, medical_history, notes } = req.body;
 
     if (!owner_name || !phone || !pet_name || !size) {
@@ -207,7 +255,6 @@ export const createPetWithOwner = async (req: Request, res: Response) => {
         const [ownerResult] = await pool.execute<ResultSetHeader>(insertOwnerQuery, [owner_name, phone]);
         const ownerId = ownerResult.insertId;
 
-        // 將過敏史與備註一起寫入資料庫，如果沒填就給 null
         const insertPetQuery = `
             INSERT INTO pets (owner_id, name, species, size, medical_history, notes) 
             VALUES (?, ?, 'Dog', ?, ?, ?)
@@ -220,6 +267,18 @@ export const createPetWithOwner = async (req: Request, res: Response) => {
             notes || null
         ]);
 
+        // 記錄到日誌
+        const employeeId = req.user?.id || null;
+        const employeeName = req.user?.name || '未知員工';
+        await pool.execute(
+            'INSERT INTO audit_logs (employee_id, action, details) VALUES (?, ?, ?)',
+            [
+                employeeId,
+                'CREATE_PET_WITH_OWNER',
+                `員工【${employeeName}】建立了新顧客與寵物檔案：【${owner_name} / 寵物：${pet_name}】`
+            ]
+        );
+
         return res.status(201).json({ success: true, message: '建檔成功！' });
     } catch (error: any) {
         console.error('Error creating owner and pet:', error);
@@ -231,13 +290,26 @@ export const createPetWithOwner = async (req: Request, res: Response) => {
 };
 
 // 更新預約狀態
-export const updateReservationStatus = async (req: Request, res: Response) => {
+export const updateReservationStatus = async (req: AuthenticatedRequest, res: Response) => {
     const { id } = req.params;
     const { status } = req.body;
 
     try {
         const updateQuery = `UPDATE reservations SET status = ? WHERE id = ?`;
         await pool.execute(updateQuery, [status, id]);
+
+        // 記錄到日誌
+        const employeeId = req.user?.id || null;
+        const employeeName = req.user?.name || '未知員工';
+        await pool.execute(
+            'INSERT INTO audit_logs (employee_id, action, details) VALUES (?, ?, ?)',
+            [
+                employeeId,
+                'UPDATE_RESERVATION_STATUS',
+                `員工【${employeeName}】更新預約 ID: ${id} 的狀態為【${status}】`
+            ]
+        );
+
         return res.json({ success: true, message: '狀態更新成功' });
     } catch (error) {
         console.error('Error updating status:', error);
@@ -245,10 +317,8 @@ export const updateReservationStatus = async (req: Request, res: Response) => {
     }
 };
 
-
-// --- 營運統計看板 API (大秀 SQL 聚合函數實力) ---
-// --- 營運統計看板 API (進階版：加入今日即時住房率) ---
-export const getDashboardStats = async (req: Request, res: Response) => {
+// --- 營運統計看板 API ---
+export const getDashboardStats = async (req: AuthenticatedRequest, res: Response) => {
     try {
         // 1. 訂單狀態統計
         const [statusRows] = await pool.execute(`
@@ -267,12 +337,10 @@ export const getDashboardStats = async (req: Request, res: Response) => {
             LIMIT 3
         `);
 
-        // 3. ✨ 全新加入：今日即時住房率動態計算 ✨
-        // A. 撈取資料庫內總共有幾間房
+        // 3. 今日即時住房率動態計算
         const [roomCountRows]: any = await pool.execute(`SELECT COUNT(*) as total_rooms FROM rooms`);
-        const totalRooms = roomCountRows[0]?.total_rooms || 1; // 防呆，避免除以 0
+        const totalRooms = roomCountRows[0]?.total_rooms || 1;
 
-        // B. 計算「現在這個瞬間 (NOW())」有幾間房被 Confirmed 的訂單佔用
         const [occupiedRows]: any = await pool.execute(`
             SELECT COUNT(DISTINCT room_id) as occupied_count 
             FROM reservations 
@@ -281,11 +349,8 @@ export const getDashboardStats = async (req: Request, res: Response) => {
               AND NOW() BETWEEN start_time AND end_time
         `);
         const occupiedRooms = occupiedRows[0]?.occupied_count || 0;
-
-        // C. 計算百分比
         const occupancyRate = Math.round((occupiedRooms / totalRooms) * 100);
 
-        // 回傳統計資料給前端
         return res.json({
             statusStats: statusRows,
             topGroomers: groomerRows,
