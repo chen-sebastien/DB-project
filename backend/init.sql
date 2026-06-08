@@ -1,54 +1,82 @@
+-- 建立資料庫 (如果不存在的話)
 CREATE DATABASE IF NOT EXISTS pet_hotel;
 USE pet_hotel;
 
-CREATE TABLE IF NOT EXISTS Users (
+-- 為了避免重複執行報錯，先刪除舊表 (順序很重要，先刪除有關聯的外鍵表)
+DROP TABLE IF EXISTS feeding_tasks;
+DROP TABLE IF EXISTS reservations;
+DROP TABLE IF EXISTS pets;
+DROP TABLE IF EXISTS owners;
+DROP TABLE IF EXISTS rooms;
+DROP TABLE IF EXISTS groomers;
+
+-- 1. 飼主資料表
+CREATE TABLE owners (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    phone VARCHAR(50) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    name VARCHAR(50) NOT NULL,
+    phone VARCHAR(20) NOT NULL UNIQUE,
+    email VARCHAR(100)
 );
 
-CREATE TABLE IF NOT EXISTS Pets (
+-- 2. 寵物資料表 (對應企劃：品種、過敏史、大/中/小型犬)
+CREATE TABLE pets (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    pet_name VARCHAR(255) NOT NULL,
-    type VARCHAR(100) NOT NULL,
-    size VARCHAR(50),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES Users(id) ON DELETE CASCADE
+    owner_id INT NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    species VARCHAR(20) NOT NULL,
+    breed VARCHAR(50),            -- 品種
+    size VARCHAR(20) NOT NULL,    -- 體型 (Small, Medium, Large)
+    medical_history TEXT,         -- 過敏史
+    notes TEXT,                   -- 行為備註 (如：需戴頭套)
+    FOREIGN KEY (owner_id) REFERENCES owners(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS Rooms (
+-- 3. 房型資料表 (對應企劃：大/中/小型犬房)
+CREATE TABLE rooms (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    room_type VARCHAR(100) NOT NULL,
-    max_capacity INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    room_number VARCHAR(20) NOT NULL UNIQUE,
+    room_type VARCHAR(20) NOT NULL -- 房型限制 (Small, Medium, Large)
 );
 
-CREATE TABLE IF NOT EXISTS Staff (
+-- 4. 美容師資料表
+CREATE TABLE groomers (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    specialty VARCHAR(255),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    name VARCHAR(50) NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS Reservations (
+-- 5. 預約核心表 (對應企劃：美容排程、房間預訂、衝堂檢核的基礎)
+CREATE TABLE reservations (
     id INT AUTO_INCREMENT PRIMARY KEY,
     pet_id INT NOT NULL,
-    room_id INT,
-    staff_id INT,
-    start_datetime DATETIME NOT NULL,
-    end_datetime DATETIME NOT NULL,
-    status ENUM('PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED') DEFAULT 'PENDING',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (pet_id) REFERENCES Pets(id) ON DELETE CASCADE,
-    FOREIGN KEY (room_id) REFERENCES Rooms(id) ON DELETE SET NULL,
-    FOREIGN KEY (staff_id) REFERENCES Staff(id) ON DELETE SET NULL,
-    CONSTRAINT chk_time_logic CHECK (start_datetime < end_datetime)
+    room_id INT,                  -- 若只有純美容，此欄位可為 NULL
+    groomer_id INT,               -- 若只有純住宿，此欄位可為 NULL
+    start_time DATETIME NOT NULL,
+    end_time DATETIME NOT NULL,
+    status VARCHAR(20) DEFAULT 'Pending', -- 狀態 (Pending, Active, Completed)
+    FOREIGN KEY (pet_id) REFERENCES pets(id),
+    FOREIGN KEY (room_id) REFERENCES rooms(id),
+    FOREIGN KEY (groomer_id) REFERENCES groomers(id)
 );
 
--- 插入假資料以供測試
-INSERT INTO Users (name, phone) VALUES ('John Doe', '0912345678');
-INSERT INTO Pets (user_id, pet_name, type, size) VALUES (1, 'Buddy', 'Dog', 'Medium');
-INSERT INTO Rooms (room_type, max_capacity) VALUES ('Standard', 1), ('Deluxe', 2);
-INSERT INTO Staff (name, specialty) VALUES ('Alice Groomer', 'Haircut'), ('Bob Groomer', 'Bath');
+-- 6. 餵食清單表 (對應企劃：餵食清單管理)
+CREATE TABLE feeding_tasks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    reservation_id INT NOT NULL,
+    feeding_time DATETIME NOT NULL,
+    food_info TEXT NOT NULL,      -- 飼料種類或份量說明
+    is_fed BOOLEAN DEFAULT FALSE, -- 狀態：是否已餵食 (0=否, 1=是)
+    FOREIGN KEY (reservation_id) REFERENCES reservations(id) ON DELETE CASCADE
+);
+
+-- ==========================================
+-- 插入初始測試資料 (方便前端直接有資料可以撈)
+-- ==========================================
+
+-- 預設 5 間房間 (2小、2中、1大)
+INSERT INTO rooms (room_number, room_type) VALUES 
+('S01', 'Small'), ('S02', 'Small'), 
+('M01', 'Medium'), ('M02', 'Medium'), 
+('L01', 'Large');
+
+-- 預設 2 位美容師
+INSERT INTO groomers (name) VALUES ('Alice'), ('Bob');

@@ -155,14 +155,18 @@ const form = reactive({
 const pets = ref<any[]>([]);
 
 const rooms = [
-  { id: 1, room_type: 'S01 (小型犬)', desc: '溫馨單間，適合體型小於 10kg', icon: 'mdi-home-heart', color: 'orange-lighten-1' },
-  { id: 3, room_type: 'M01 (中型犬)', desc: '寬敞空間，適合 10~20kg 之中型犬', icon: 'mdi-home-modern', color: 'green-lighten-1' },
-  { id: 5, room_type: 'L01 (大型犬)', desc: '無障礙大房，適合 20kg 以上大狗狗', icon: 'mdi-home-city', color: 'blue-lighten-1' }
+  { id: 1, room_type: 'S01 (標準小型犬)', desc: '溫馨單間，適合 10kg 以下', icon: 'mdi-home-heart', color: 'orange-lighten-1' },
+  { id: 2, room_type: 'S02 (豪華小型犬)', desc: '附全天候視訊鏡頭與專屬玩具', icon: 'mdi-video', color: 'orange-darken-1' },
+  { id: 3, room_type: 'M01 (標準中型犬)', desc: '寬敞空間，適合 10~20kg', icon: 'mdi-home-modern', color: 'green-lighten-1' },
+  { id: 4, room_type: 'L01 (無障礙大房)', desc: '適合 20kg 以上或高齡大狗狗', icon: 'mdi-home-city', color: 'blue-lighten-1' },
+  { id: 5, room_type: 'C01 (貓咪跳台房)', desc: '挑高設計，貓咪專屬舒壓空間', icon: 'mdi-cat', color: 'purple-lighten-1' }
 ];
 
 const staffs = [
   { id: 1, name: 'Alice (店長)', icon: 'mdi-face-woman-shimmer', experience: '5 年', specialty: '大型犬安撫、高齡犬照護', color: 'pink-darken-1' },
-  { id: 2, name: 'Bob (資深美容師)', icon: 'mdi-face-man-profile', experience: '3 年', specialty: '貓咪護理、特殊毛髮修剪', color: 'blue-darken-1' }
+  { id: 2, name: 'Bob (資深美容師)', icon: 'mdi-face-man-profile', experience: '3 年', specialty: '貓咪護理、特殊毛髮修剪', color: 'blue-darken-1' },
+  { id: 3, name: 'Charlie (美容助理)', icon: 'mdi-face-man-shimmer', experience: '1 年', specialty: '基礎洗沐、剪甲護理', color: 'teal-darken-1' },
+  { id: 4, name: 'Diana (SPA 芳療師)', icon: 'mdi-spa', experience: '4 年', specialty: '寵物皮毛養護、精油按摩', color: 'purple-darken-1' }
 ];
 
 const snackbar = reactive({ show: false, message: '', color: 'error' });
