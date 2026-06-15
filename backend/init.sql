@@ -26,7 +26,7 @@ CREATE TABLE employees (
 -- 預設一個管理員帳號：admin / 密碼：admin123
 -- 雜湊值是用 bcrypt 對 'admin123' 加密產生的
 INSERT INTO employees (username, password_hash, name, role) VALUES 
-('admin', '$2b$10$EpYnVKjxt1K30x5sLpykpeC7Dfe4QWn00hW9Lz3x9v2BvJqCqCqCq', '老闆', 'Admin');
+('admin', '$2b$10$Av.KcKDFSGjFPZa2bFycJOn/BS3E3vz6cgnbDdz3eoeakZ.3IX68u', '老闆', 'Admin');
 
 -- 3. 飼主資料表
 CREATE TABLE owners (
