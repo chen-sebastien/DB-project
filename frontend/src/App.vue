@@ -48,6 +48,17 @@
                   {{ currentUser?.role === 'Admin' ? '👑 老闆/管理員' : '💼 服務夥伴' }}
                 </v-chip>
               </div>
+              <!-- 修改個人密碼快捷按鈕 -->
+              <v-btn
+                v-if="currentUser"
+                icon="mdi-key-variant"
+                variant="text"
+                size="small"
+                color="orange-darken-3"
+                class="ml-auto"
+                @click="openChangePasswordDialog"
+                title="修改個人密碼"
+              ></v-btn>
             </div>
           </v-card>
         </div>
@@ -113,12 +124,104 @@
           </router-view>
         </v-container>
       </v-main>
+
+      <!-- 修改個人密碼對話框 -->
+      <v-dialog v-model="passwordDialog" max-width="450px" persistent>
+        <v-card rounded="xl" class="pa-4">
+          <v-card-title class="font-weight-bold text-brown-darken-4 d-flex align-center pb-2">
+            <v-icon icon="mdi-key-outline" color="orange-darken-2" class="mr-2"></v-icon>
+            修改個人登入密碼
+          </v-card-title>
+          
+          <v-card-text>
+            <v-form ref="passwordForm" @submit.prevent="handleChangePassword">
+              <v-text-field
+                v-model="pwdData.oldPassword"
+                label="目前的舊密碼"
+                type="password"
+                variant="outlined"
+                color="orange-darken-2"
+                rounded="lg"
+                class="mb-3"
+                required
+                :rules="[v => !!v || '請輸入舊密碼']"
+              ></v-text-field>
+
+              <v-text-field
+                v-model="pwdData.newPassword"
+                label="設定新密碼"
+                type="password"
+                variant="outlined"
+                color="orange-darken-2"
+                rounded="lg"
+                class="mb-3"
+                required
+                :rules="[
+                  v => !!v || '請輸入新密碼',
+                  v => (v && v.length >= 6) || '密碼長度需至少 6 位字元'
+                ]"
+              ></v-text-field>
+
+              <v-text-field
+                v-model="pwdData.confirmPassword"
+                label="再次確認新密碼"
+                type="password"
+                variant="outlined"
+                color="orange-darken-2"
+                rounded="lg"
+                class="mb-4"
+                required
+                :rules="[
+                  v => !!v || '請再次輸入新密碼',
+                  v => v === pwdData.newPassword || '兩次輸入的新密碼不一致'
+                ]"
+              ></v-text-field>
+
+              <v-alert
+                v-if="pwdError"
+                type="error"
+                density="compact"
+                variant="tonal"
+                class="mb-4 text-left font-weight-bold"
+              >
+                {{ pwdError }}
+              </v-alert>
+
+              <div class="d-flex justify-end">
+                <v-btn
+                  variant="text"
+                  rounded="pill"
+                  color="grey-darken-1"
+                  class="font-weight-bold mr-2"
+                  @click="closeChangePasswordDialog"
+                >
+                  取消
+                </v-btn>
+                <v-btn
+                  type="submit"
+                  color="orange-darken-2"
+                  rounded="pill"
+                  class="font-weight-bold px-6 text-white"
+                  :loading="pwdLoading"
+                >
+                  確認修改
+                </v-btn>
+              </div>
+            </v-form>
+          </v-card-text>
+        </v-card>
+      </v-dialog>
+
+      <!-- 提示通知氣泡 -->
+      <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000" location="top">
+        {{ snackbar.message }}
+      </v-snackbar>
     </template>
   </v-app>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch, reactive } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
 
@@ -129,22 +232,94 @@ const router = useRouter();
 // 判斷是否為登入頁
 const isLoginPage = computed(() => route.path === '/login');
 
-// 取得當前使用者資訊
-const currentUser = computed(() => {
+// 當前使用者資訊
+const currentUser = ref<any>(null);
+
+const updateCurrentUser = () => {
   const userStr = localStorage.getItem('user');
-  return userStr ? JSON.parse(userStr) : null;
+  currentUser.value = userStr ? JSON.parse(userStr) : null;
+};
+
+// 監聽路由改變以更新使用者身分，解決登入/登出切換身分不刷新的 Bug
+watch(() => route.path, () => {
+  updateCurrentUser();
+}, { immediate: true });
+
+// 修改密碼相關響應式資料
+const passwordDialog = ref(false);
+const passwordForm = ref<any>(null);
+const pwdLoading = ref(false);
+const pwdError = ref('');
+const pwdData = reactive({
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: ''
 });
+
+// 提示控制
+const snackbar = reactive({
+  show: false,
+  message: '',
+  color: 'success'
+});
+
+const openChangePasswordDialog = () => {
+  pwdError.value = '';
+  pwdData.oldPassword = '';
+  pwdData.newPassword = '';
+  pwdData.confirmPassword = '';
+  passwordDialog.value = true;
+};
+
+const closeChangePasswordDialog = () => {
+  passwordDialog.value = false;
+  if (passwordForm.value) passwordForm.value.resetValidation();
+};
+
+const handleChangePassword = async () => {
+  if (!pwdData.oldPassword || !pwdData.newPassword || !pwdData.confirmPassword) return;
+  if (pwdData.newPassword !== pwdData.confirmPassword) {
+    pwdError.value = '新密碼與確認密碼不一致';
+    return;
+  }
+  if (pwdData.newPassword.length < 6) {
+    pwdError.value = '新密碼長度必須至少為 6 個字元';
+    return;
+  }
+
+  pwdLoading.value = true;
+  pwdError.value = '';
+
+  try {
+    const res = await axios.post('http://localhost:3000/api/auth/change-password', {
+      oldPassword: pwdData.oldPassword,
+      newPassword: pwdData.newPassword
+    });
+
+    if (res.data.success) {
+      snackbar.message = '密碼修改成功！下次登入請使用新密碼。';
+      snackbar.color = 'success';
+      snackbar.show = true;
+      closeChangePasswordDialog();
+    }
+  } catch (error: any) {
+    console.error('Failed to change password:', error);
+    pwdError.value = error.response?.data?.error || '修改密碼失敗，請確認舊密碼是否輸入正確';
+  } finally {
+    pwdLoading.value = false;
+  }
+};
 
 // 登出處理
 const handleLogout = () => {
   const user = currentUser.value;
   if (user) {
-    // 呼叫記錄日誌（可選，直接在登出時清除 Token）
     console.log(`${user.name} 已登出`);
   }
   localStorage.removeItem('token');
   localStorage.removeItem('user');
   delete axios.defaults.headers.common['Authorization'];
+  currentUser.value = null;
   router.push('/login');
 };
 
@@ -154,6 +329,7 @@ onMounted(() => {
   if (token) {
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   }
+  updateCurrentUser();
 });
 </script>
 

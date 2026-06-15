@@ -122,3 +122,62 @@ export const registerStaff = async (req: AuthenticatedRequest, res: Response) =>
         return res.status(500).json({ error: '建立員工帳號失敗' });
     }
 };
+
+// 修改個人密碼 API
+export const changePassword = async (req: AuthenticatedRequest, res: Response) => {
+    const { oldPassword, newPassword } = req.body;
+    const employeeId = req.user?.id;
+
+    if (!employeeId) {
+        return res.status(401).json({ error: '請登入系統以執行此操作' });
+    }
+
+    if (!oldPassword || !newPassword) {
+        return res.status(400).json({ error: '請提供舊密碼與新密碼' });
+    }
+
+    try {
+        // 取得員工目前的密碼雜湊
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            'SELECT password_hash, name FROM employees WHERE id = ?',
+            [employeeId]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({ error: '找不到該員工資料' });
+        }
+
+        const employee = rows[0];
+        const isPasswordValid = await bcrypt.compare(oldPassword, employee.password_hash);
+
+        if (!isPasswordValid) {
+            return res.status(400).json({ error: '舊密碼輸入錯誤' });
+        }
+
+        // 對新密碼進行雜湊
+        const salt = await bcrypt.genSalt(10);
+        const newPasswordHash = await bcrypt.hash(newPassword, salt);
+
+        // 更新密碼
+        await pool.execute(
+            'UPDATE employees SET password_hash = ? WHERE id = ?',
+            [newPasswordHash, employeeId]
+        );
+
+        // 記錄操作日誌
+        await pool.execute(
+            'INSERT INTO audit_logs (employee_id, action, details) VALUES (?, ?, ?)',
+            [employeeId, 'CHANGE_PASSWORD', `員工【${employee.name}】修改了自己的密碼`]
+        );
+
+        return res.json({
+            success: true,
+            message: '密碼修改成功！'
+        });
+
+    } catch (error) {
+        console.error('Change password error:', error);
+        return res.status(500).json({ error: '修改密碼發生異常' });
+    }
+};
+
