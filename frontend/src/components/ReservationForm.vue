@@ -84,14 +84,26 @@
               </v-col>
             </v-row>
             
+            <!-- 客房已滿警示 -->
+            <v-alert
+              v-if="isRoomFullForPetSize"
+              type="error"
+              variant="tonal"
+              density="compact"
+              class="mt-4 rounded-xl font-weight-bold text-body-2"
+              icon="mdi-alert-octagon"
+            >
+              ⚠️ 目前沒有可用房間！此時段您選擇的體型客房已全滿，請調整入住時間。
+            </v-alert>
+
             <div class="d-flex justify-end mt-4">
               <v-btn
                 color="orange-darken-2"
                 rounded="pill"
                 class="px-8 font-weight-bold"
                 size="large"
-                @click="step = 2"
-                :disabled="!form.pet_id || !form.start_datetime || !form.end_datetime"
+                @click="validateAndGoToStep2"
+                :disabled="!form.pet_id || !form.start_datetime || !form.end_datetime || isRoomFullForPetSize"
               >
                 挑選資源 ➡️
               </v-btn>
@@ -113,11 +125,16 @@
             <v-row>
               <v-col cols="12" sm="6" md="4" v-for="room in rooms" :key="room.id">
                 <v-card
-                  :color="form.room_id === room.id ? 'orange-lighten-5' : 'white'"
-                  :class="['border h-100 room-card d-flex flex-column', form.room_id === room.id ? 'selected-card shadow-lg' : '']"
-                  @click="form.room_id = room.id"
+                  :color="form.room_id === room.id ? (hasRoomConflict ? 'red-lighten-5' : 'orange-lighten-5') : (occupiedRoomIds.includes(room.id) ? 'grey-lighten-4' : 'white')"
+                  :class="[
+                    'border h-100 room-card d-flex flex-column', 
+                    form.room_id === room.id ? (hasRoomConflict ? 'conflict-border pulsing-red-border' : 'selected-card shadow-lg') : '',
+                    occupiedRoomIds.includes(room.id) ? 'opacity-60 cursor-not-allowed' : ''
+                  ]"
+                  @click="!occupiedRoomIds.includes(room.id) && (form.room_id = room.id)"
                   rounded="xl"
                   elevation="1"
+                  :disabled="occupiedRoomIds.includes(room.id)"
                   style="transition: all 0.3s;"
                 >
                   <v-img
@@ -125,14 +142,19 @@
                     height="120"
                     cover
                     class="bg-grey-lighten-3"
+                    :style="occupiedRoomIds.includes(room.id) ? 'filter: grayscale(1); opacity: 0.5;' : ''"
                   ></v-img>
                   
                   <v-card-item class="pt-3 pb-1 flex-grow-1">
                     <v-card-title class="font-weight-bold text-brown-darken-4 text-body-1 d-flex justify-space-between align-center">
-                      {{ room.room_type }}
-                      <v-icon :icon="room.icon" :color="room.color" size="small"></v-icon>
+                      {{ translateSize(room.room_type) }}
+                      <v-icon :icon="room.icon" :color="occupiedRoomIds.includes(room.id) ? 'grey' : room.color" size="small"></v-icon>
                     </v-card-title>
-                    <v-card-subtitle class="mt-1 text-caption">房號: {{ room.room_number }}</v-card-subtitle>
+                    <v-card-subtitle class="mt-1 text-caption font-weight-bold">
+                      房號: {{ room.room_number }} · 
+                      <span v-if="occupiedRoomIds.includes(room.id)" class="text-error">已預約 (不可選)</span>
+                      <span v-else>${{ room.daily_rate }}/晚</span>
+                    </v-card-subtitle>
                   </v-card-item>
 
                   <v-card-text class="text-caption text-grey-darken-2 pb-3 pt-0">
@@ -143,6 +165,53 @@
             </v-row>
           </div>
 
+          <!-- 1.5. 客製照護項目勾選區 -->
+          <div class="text-left mb-6">
+            <div class="text-subtitle-1 font-weight-bold text-brown-darken-4 mb-3">
+              🐾 規劃客製照護服務項目 (可多選)
+            </div>
+            <v-card rounded="xl" class="pa-4 border bg-white" style="border-color: rgba(141, 110, 99, 0.15) !important;">
+              <v-row>
+                <v-col cols="6" sm="3">
+                  <v-checkbox
+                    v-model="form.needs_feeding"
+                    label="🍽️ 餵食服務"
+                    color="orange-darken-2"
+                    density="comfortable"
+                    hide-details
+                  ></v-checkbox>
+                </v-col>
+                <v-col cols="6" sm="3">
+                  <v-checkbox
+                    v-model="form.needs_walking"
+                    label="👣 散步陪伴"
+                    color="blue-darken-1"
+                    density="comfortable"
+                    hide-details
+                  ></v-checkbox>
+                </v-col>
+                <v-col cols="6" sm="3">
+                  <v-checkbox
+                    v-model="form.needs_medication"
+                    label="💊 協助給藥"
+                    color="purple-darken-1"
+                    density="comfortable"
+                    hide-details
+                  ></v-checkbox>
+                </v-col>
+                <v-col cols="6" sm="3">
+                  <v-checkbox
+                    v-model="form.needs_grooming"
+                    label="✂️ 美容洗沐"
+                    color="teal-darken-1"
+                    density="comfortable"
+                    hide-details
+                  ></v-checkbox>
+                </v-col>
+              </v-row>
+            </v-card>
+          </div>
+
           <!-- 2. 美容師卡片選擇區 -->
           <div class="text-left mb-6">
             <div class="text-subtitle-1 font-weight-bold text-brown-darken-4 mb-3">
@@ -151,48 +220,97 @@
             <v-row>
               <v-col cols="12" sm="6" md="4" v-for="staff in staffs" :key="staff.id">
                 <v-card
-                  :color="form.staff_id === staff.id ? 'orange-lighten-5' : 'white'"
-                  :class="['border h-100 staff-card d-flex flex-column', form.staff_id === staff.id ? 'selected-card shadow-lg' : '']"
-                  @click="form.staff_id = staff.id === form.staff_id ? null : staff.id"
+                  :color="form.staff_id === staff.id ? (hasStaffConflict ? 'red-lighten-5' : 'orange-lighten-5') : (occupiedGroomerIds.includes(staff.id) ? 'grey-lighten-4' : 'white')"
+                  :class="[
+                    'border h-100 staff-card d-flex flex-column', 
+                    form.staff_id === staff.id ? (hasStaffConflict ? 'conflict-border pulsing-red-border' : 'selected-card shadow-lg') : '',
+                    occupiedGroomerIds.includes(staff.id) ? 'opacity-60 cursor-not-allowed' : ''
+                  ]"
+                  @click="!occupiedGroomerIds.includes(staff.id) && (form.staff_id = staff.id === form.staff_id ? null : staff.id)"
                   rounded="xl"
                   elevation="1"
+                  :disabled="occupiedGroomerIds.includes(staff.id)"
                   style="transition: all 0.3s;"
                 >
                   <v-card-item class="pt-4 pb-2">
                     <div class="d-flex align-center">
-                      <v-avatar :color="staff.color" size="40" class="text-white mr-3 elevation-1">
+                      <v-avatar :color="occupiedGroomerIds.includes(staff.id) ? 'grey' : staff.color" size="40" class="text-white mr-3 elevation-1">
                         <v-icon :icon="staff.icon"></v-icon>
                       </v-avatar>
                       <div class="text-left">
-                        <v-card-title class="font-weight-bold text-brown-darken-4 pa-0 text-body-2">
+                        <v-card-title class="font-weight-bold text-brown-darken-4 pa-0 text-body-2 d-flex align-center">
                           {{ staff.name }}
+                          <v-chip v-if="occupiedGroomerIds.includes(staff.id)" size="x-small" color="red" class="ml-2 font-weight-bold text-white" variant="flat">已預約 (不可選)</v-chip>
                         </v-card-title>
                         <div class="d-flex align-center mt-1">
                           <v-rating
-                            model-value="5"
+                            :model-value="staff.rating"
                             readonly
                             density="compact"
                             size="x-small"
                             color="amber-accent-4"
+                            half-increments
                           ></v-rating>
-                          <span class="text-caption text-grey-darken-1 ml-1" style="font-size: 10px !important;">資歷 {{ staff.experience }}</span>
+                          <span class="text-caption text-grey-darken-1 ml-1" style="font-size: 10px !important;">★ {{ staff.rating }} ({{ staff.service_count }} 次服務)</span>
                         </div>
                       </div>
                     </div>
                   </v-card-item>
 
                   <v-card-text class="text-caption text-grey-darken-2 pb-4 pt-1 flex-grow-1">
-                    <strong>專長：</strong>{{ staff.specialty }}
+                    <strong>專長：</strong>{{ staff.specialty }}<br>
+                    <span class="text-caption text-grey-darken-1">📖 資歷 {{ staff.experience }} · <span v-if="occupiedGroomerIds.includes(staff.id)" class="text-error font-weight-bold">目前已被佔用</span><span v-else>收費: ${{ staff.service_rate }}</span></span>
+                    <div class="mt-2 d-flex flex-wrap gap-1" v-if="staff.credentials && staff.credentials.length > 0">
+                      <v-chip 
+                        v-for="cred in staff.credentials" 
+                        :key="cred" 
+                        size="x-small" 
+                        :color="occupiedGroomerIds.includes(staff.id) ? 'grey' : 'teal-darken-1'" 
+                        variant="tonal"
+                        class="font-weight-bold"
+                      >{{ cred }}</v-chip>
+                    </div>
                   </v-card-text>
                 </v-card>
               </v-col>
             </v-row>
           </div>
 
+          <!-- 衝突警示 Banner -->
+          <v-alert
+            v-if="hasRoomConflict"
+            type="error"
+            variant="tonal"
+            density="compact"
+            class="mt-4 rounded-xl font-weight-bold text-body-2 text-left"
+            icon="mdi-alert-octagon"
+          >
+            ⚠️ 衝突阻擋：{{ getDetailedRoomConflictInfo }}
+          </v-alert>
+
+          <v-alert
+            v-if="hasStaffConflict"
+            type="error"
+            variant="tonal"
+            density="compact"
+            class="mt-2 rounded-xl font-weight-bold text-body-2 text-left"
+            icon="mdi-alert-octagon"
+          >
+            ⚠️ 衝突阻擋：{{ getDetailedStaffConflictInfo }}
+          </v-alert>
+
           <!-- 上一步與下一步 -->
           <div class="d-flex justify-space-between mt-6">
             <v-btn variant="text" rounded="pill" class="font-weight-bold text-brown-lighten-1" @click="step = 1">⬅️ 返回時間</v-btn>
-            <v-btn color="orange-darken-2" rounded="pill" class="px-8 font-weight-bold" @click="step = 3">下一步 ➡️</v-btn>
+            <v-btn 
+              color="orange-darken-2" 
+              rounded="pill" 
+              class="px-8 font-weight-bold text-white" 
+              @click="step = 3"
+              :disabled="hasRoomConflict || hasStaffConflict"
+            >
+              下一步 ➡️
+            </v-btn>
           </div>
         </v-stepper-window-item>
 
@@ -218,6 +336,9 @@
                 </v-col>
                 <v-col cols="12" class="py-1">
                   💇 <strong>美容規劃：</strong> <span class="text-green-darken-3 font-weight-bold">{{ getSelectedStaffName() }}</span>
+                </v-col>
+                <v-col cols="12" class="py-1">
+                  🐾 <strong>客製照護：</strong> <span class="text-brown-darken-3 font-weight-bold">{{ getSelectedCareServices() }}</span>
                 </v-col>
               </v-row>
             </v-card>
@@ -259,10 +380,23 @@
           </v-row>
           <v-divider class="my-4" color="brown-lighten-3"></v-divider>
           <v-row>
-            <v-col cols="12" md="6">
+            <v-col cols="12" md="4">
               <v-text-field v-model="newPetForm.pet_name" label="寵物名字" variant="outlined" color="orange-darken-2" prepend-inner-icon="mdi-dog" hide-details></v-text-field>
             </v-col>
-            <v-col cols="12" md="6">
+            <v-col cols="12" md="4">
+              <v-select
+                v-model="newPetForm.species"
+                :items="[{title: '🐶 狗 (Dog)', value: 'Dog'}, {title: '🐱 貓 (Cat)', value: 'Cat'}]"
+                item-title="title"
+                item-value="value"
+                label="寵物物種"
+                variant="outlined"
+                color="orange-darken-2"
+                prepend-inner-icon="mdi-cat"
+                hide-details
+              ></v-select>
+            </v-col>
+            <v-col cols="12" md="4">
               <v-select v-model="newPetForm.size" :items="['Small', 'Medium', 'Large']" label="寵物體型" variant="outlined" color="orange-darken-2" prepend-inner-icon="mdi-scale-balance" hide-details></v-select>
             </v-col>
           </v-row>
@@ -277,6 +411,30 @@
       </v-card>
     </v-dialog>
 
+    <!-- 預約提交成功跳轉 Dialog -->
+    <v-dialog v-model="successDialog" max-width="480px" persistent>
+      <v-card rounded="xl" class="pa-6 text-center">
+        <v-card-text class="pt-4">
+          <v-avatar color="success" size="64" class="mb-4 text-white elevation-2">
+            <v-icon icon="mdi-check-bold" size="36"></v-icon>
+          </v-avatar>
+          <div class="text-h5 font-weight-bold text-brown-darken-4 mb-2">預約提交成功！</div>
+          <p class="text-body-2 text-grey-darken-2 mb-6" style="line-height: 1.6;">
+            此預約已順利建檔，目前狀態為 <strong>待確認 (Pending)</strong>。<br>
+            您可以直接前往首頁對該預約進行項目細目審核與收款確認。
+          </p>
+          <div class="d-flex flex-column gap-2" style="gap: 8px;">
+            <v-btn color="orange-darken-2" rounded="pill" class="font-weight-bold text-white py-2" variant="elevated" @click="goToDashboard">
+              🔍 前往訂單審查與確認
+            </v-btn>
+            <v-btn variant="text" rounded="pill" class="font-weight-bold text-grey-darken-1" @click="successDialog = false">
+              留在本頁面
+            </v-btn>
+          </div>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <!-- 錯誤與成功提示 Snackbar -->
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="4000" location="top" rounded="xl" elevation="3">
       <span class="font-weight-bold">{{ snackbar.message }}</span>
@@ -288,47 +446,140 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch } from 'vue';
-import axios from 'axios';
+import { ref, reactive, onMounted, watch, computed } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
+import apiClient from '../api/client';
 
+const router = useRouter();
+const route = useRoute();
 const step = ref(1);
 const loading = ref(false);
+const successDialog = ref(false);
+const createdReservationId = ref<number | null>(null);
+const reservations = ref<any[]>([]);
+const businessHours = ref({ start: '09:00', end: '21:00' });
 
 const form = reactive({
   pet_id: null as number | null, 
   room_id: null as number | null,
   staff_id: null as number | null,
   start_datetime: '',
-  end_datetime: ''
+  end_datetime: '',
+  needs_feeding: true,
+  needs_walking: false,
+  needs_medication: false,
+  needs_grooming: false
 });
 
 const pets = ref<any[]>([]);
+const rooms = ref<any[]>([]);
+const staffs = ref<any[]>([]);
 
-const rooms = [
-  { id: 1, room_type: 'S01 (標準小型套房)', room_number: 'S01', desc: '適合 10kg 以下小型毛孩。', icon: 'mdi-home-heart', color: 'orange-lighten-1' },
-  { id: 2, room_type: 'S02 (奢華小型套房)', room_number: 'S02', desc: '附全天候視訊鏡頭與專屬玩具。', icon: 'mdi-video', color: 'orange-darken-1' },
-  { id: 3, room_type: 'M01 (標準中型套房)', room_number: 'M01', desc: '寬敞舒適空間，適合 10~20kg 毛孩。', icon: 'mdi-home-modern', color: 'green-lighten-1' },
-  { id: 4, room_type: 'M02 (奢華中型套房)', room_number: 'M02', desc: '附舒適加厚軟墊，適合 10~20kg 毛孩。', icon: 'mdi-dog-side', color: 'green-darken-1' },
-  { id: 5, room_type: 'L01 (豪華旗艦大型套房)', room_number: 'L01', desc: '無障礙設計，適合 20kg 以上大毛寶貝。', icon: 'mdi-home-city', color: 'blue-lighten-1' }
-];
+const translateSize = (size: string) => {
+  const map: Record<string, string> = {
+    Small: '小型套房',
+    Medium: '中型套房',
+    Large: '大型套房'
+  };
+  return map[size] || size;
+};
 
-const staffs = [
-  { id: 1, name: 'Alice (店長)', icon: 'mdi-face-woman-shimmer', experience: '5 年', specialty: '大型犬安撫、高齡犬照護', color: 'pink-darken-1' },
-  { id: 2, name: 'Bob (資深美容師)', icon: 'mdi-face-man-profile', experience: '3 年', specialty: '貓咪護理、特殊毛髮修剪', color: 'blue-darken-1' },
-  { id: 3, name: 'Charlie (美容助理)', icon: 'mdi-face-man-shimmer', experience: '1 年', specialty: '基礎洗沐、剪甲護理', color: 'teal-darken-1' },
-  { id: 4, name: 'Diana (SPA 芳療師)', icon: 'mdi-spa', experience: '4 年', specialty: '皮毛精油理療養護', color: 'purple-darken-1' }
-];
+// 獲取動態房間列表
+const fetchRooms = async () => {
+  try {
+    const res = await apiClient.get('/resources/rooms');
+    rooms.value = res.data.map((r: any) => {
+      let icon = 'mdi-home-heart';
+      let color = 'orange-lighten-1';
+      let desc = '標準住宿套房，乾淨溫馨。';
+      if (r.room_type === 'Small') {
+        icon = 'mdi-home-heart';
+        color = 'orange-lighten-1';
+        desc = '適合 10kg 以下小型毛孩，附有柔軟睡墊與水碗。';
+      } else if (r.room_type === 'Medium') {
+        icon = 'mdi-home-modern';
+        color = 'green-lighten-1';
+        desc = '舒適寬敞，適合 10-20kg 中型毛孩。';
+      } else if (r.room_type === 'Large') {
+        icon = 'mdi-home-city';
+        color = 'blue-lighten-1';
+        desc = '旗艦豪華規格，適合 20kg 以上大毛寶貝。';
+      }
+      return {
+        ...r,
+        icon,
+        color,
+        desc
+      };
+    });
+
+    // 載入完房間後，如果 URL query 中有 room_id，進行預填
+    if (route.query.room_id) {
+      form.room_id = Number(route.query.room_id);
+    }
+  } catch (error) {
+    console.error('Failed to fetch rooms:', error);
+  }
+};
+
+const fetchStaffs = async () => {
+  try {
+    const res = await apiClient.get('/reservations/staffs');
+    staffs.value = res.data.map((employee: any) => {
+      const name = employee.name;
+      let icon = 'mdi-account-star-outline';
+      let color = 'orange-darken-1';
+      let credentials: string[] = ['🧡 專業照護認證'];
+
+      if (name.includes('Alice')) {
+        icon = 'mdi-face-woman-shimmer';
+        color = 'pink-darken-1';
+        credentials = ['🛡️ 丙級美容證照', '🧡 寵物急救認證'];
+      } else if (name.includes('Bob')) {
+        icon = 'mdi-face-man-profile';
+        color = 'blue-darken-1';
+        credentials = ['🛡️ 丙級美容證照'];
+      } else if (name.includes('Charlie')) {
+        icon = 'mdi-face-man-shimmer';
+        color = 'teal-darken-1';
+        credentials = [];
+      } else if (name.includes('Diana')) {
+        icon = 'mdi-spa';
+        color = 'purple-darken-1';
+        credentials = ['🛡️ 丙級美容證照', '🌿 SPA 芳療證書'];
+      }
+
+      return {
+        id: employee.id,
+        name: employee.name,
+        icon,
+        experience: `${employee.experience_years || 1} 年`,
+        specialty: employee.specialty || '寵物日常洗沐、日常照護',
+        color,
+        rating: Number(employee.rating) || 5.0,
+        service_count: employee.service_count || 0,
+        service_rate: employee.service_rate || 500,
+        credentials
+      };
+    });
+  } catch (error) {
+    console.error('抓取排班員工失敗:', error);
+  }
+};
 
 const snackbar = reactive({ show: false, message: '', color: 'error' });
 
-// 智慧配房邏輯
+// 智慧配房邏輯：依據動態房間列表，挑選第一個符合毛孩體型的房間
 watch(() => form.pet_id, (newPetId) => {
   if (newPetId) {
     const selectedPet = pets.value.find(p => p.id === newPetId);
-    if (selectedPet) {
-      if (selectedPet.size === 'Small') form.room_id = 1;      
-      else if (selectedPet.size === 'Medium') form.room_id = 3; 
-      else if (selectedPet.size === 'Large') form.room_id = 5;  
+    if (selectedPet && rooms.value.length > 0) {
+      const recommendedRoom = rooms.value.find(r => r.room_type === selectedPet.size);
+      if (recommendedRoom) {
+        form.room_id = recommendedRoom.id;
+      } else {
+        form.room_id = rooms.value[0].id;
+      }
     }
   } else {
     form.room_id = null;
@@ -339,18 +590,24 @@ const showAddDialog = ref(false);
 const isAdding = ref(false);
 
 const newPetForm = reactive({
-  owner_name: '', phone: '', pet_name: '', size: 'Small', medical_history: '', notes: ''
+  owner_name: '',
+  phone: '',
+  pet_name: '',
+  size: 'Small',
+  species: 'Dog',
+  medical_history: '',
+  notes: ''
 });
 
 const submitNewPet = async () => {
-  if (!newPetForm.owner_name || !newPetForm.phone || !newPetForm.pet_name || !newPetForm.size) {
+  if (!newPetForm.owner_name || !newPetForm.phone || !newPetForm.pet_name || !newPetForm.size || !newPetForm.species) {
     snackbar.color = 'warning'; snackbar.message = '請填寫所有必填欄位喔！'; snackbar.show = true; return;
   }
   isAdding.value = true;
   try {
-    await axios.post('http://localhost:3000/api/reservations/pets', newPetForm);
+    await apiClient.post('/reservations/pets', newPetForm);
     showAddDialog.value = false; snackbar.color = 'success'; snackbar.message = '資料建立並建檔成功！'; snackbar.show = true;
-    newPetForm.owner_name = ''; newPetForm.phone = ''; newPetForm.pet_name = ''; newPetForm.size = 'Small'; newPetForm.medical_history = ''; newPetForm.notes = '';
+    newPetForm.owner_name = ''; newPetForm.phone = ''; newPetForm.pet_name = ''; newPetForm.size = 'Small'; newPetForm.species = 'Dog'; newPetForm.medical_history = ''; newPetForm.notes = '';
     await fetchPets();
   } catch (error: any) {
     snackbar.color = 'error'; snackbar.message = error.response?.data?.error || '建檔失敗，請確認電話號碼是否重複。'; snackbar.show = true;
@@ -361,10 +618,10 @@ const submitNewPet = async () => {
 
 const fetchPets = async () => {
   try {
-    const response = await axios.get('http://localhost:3000/api/reservations/pets');
+    const response = await apiClient.get('/reservations/pets');
     pets.value = response.data.map((pet: any) => ({
       ...pet,
-      display_name: `${pet.pet_name} (飼主: ${pet.owner_name} - ${pet.size === 'Small' ? '小型犬' : (pet.size === 'Medium' ? '中型犬' : '大型犬')})`
+      display_name: `${pet.pet_name} (${pet.species === 'Dog' ? '🐶 狗' : '🐱 貓'} - 飼主: ${pet.owner_name} - ${pet.size === 'Small' ? '小型' : (pet.size === 'Medium' ? '中型' : '大型')})`
     }));
   } catch (error) {
     console.error('抓取寵物資料失敗:', error);
@@ -379,22 +636,83 @@ const getSelectedPetName = () => {
 
 const getSelectedRoomName = () => {
   if (!form.room_id) return '不需住宿（僅美容）';
-  const room = rooms.find(r => r.id === form.room_id);
-  return room ? `${room.room_type} (房號 ${room.room_number})` : '未知房間';
+  const room = rooms.value.find(r => r.id === form.room_id);
+  return room ? `${translateSize(room.room_type)} (房號 ${room.room_number}) - $${room.daily_rate}/晚` : '未知房間';
 };
 
 const getSelectedStaffName = () => {
   if (!form.staff_id) return '不需美容（僅住宿）';
-  const staff = staffs.find(s => s.id === form.staff_id);
-  return staff ? staff.name : '未知美容師';
+  const staff = staffs.value.find(s => s.id === form.staff_id);
+  return staff ? `${staff.name} - $${staff.service_rate}/次` : '未知服務人員';
+};
+
+const getSelectedCareServices = () => {
+  const services = [];
+  if (form.needs_feeding) services.push('🍽️ 餵食');
+  if (form.needs_walking) services.push('👣 散步');
+  if (form.needs_medication) services.push('💊 給藥');
+  if (form.needs_grooming) services.push('✂️ 美容');
+  return services.length > 0 ? services.join('、') : '無客製照護';
+};
+
+const validateAndGoToStep2 = () => {
+  if (!form.start_datetime || !form.end_datetime) return;
+
+  const now = new Date();
+  const start = new Date(form.start_datetime);
+  const end = new Date(form.end_datetime);
+
+  // 1. 檢查是否為過去時間 (放寬 10 分鐘容差)
+  if (start.getTime() < now.getTime() - 10 * 60 * 1000) {
+    snackbar.color = 'error';
+    snackbar.message = '⚠️ 入住時間不能是過去的時間！請重新選擇。';
+    snackbar.show = true;
+    return;
+  }
+
+  // 2. 檢查退房是否晚於入住
+  if (end <= start) {
+    snackbar.color = 'error';
+    snackbar.message = '⚠️ 退房時間必須晚於入住時間！';
+    snackbar.show = true;
+    return;
+  }
+
+  // 3. 營業時間防呆比對
+  const getHM = (d: Date) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const startHM = getHM(start);
+  const endHM = getHM(end);
+
+  if (startHM < businessHours.value.start || startHM > businessHours.value.end || endHM < businessHours.value.start || endHM > businessHours.value.end) {
+    snackbar.color = 'error';
+    snackbar.message = `⚠️ 預約時間不在營業時間內！本店營業時間為 ${businessHours.value.start} 至 ${businessHours.value.end}，請重新調整。`;
+    snackbar.show = true;
+    return;
+  }
+
+  step.value = 2;
+};
+
+const goToDashboard = () => {
+  successDialog.value = false;
+  router.push('/');
 };
 
 const submitReservation = async () => {
   loading.value = true;
   try {
-    await axios.post('http://localhost:3000/api/reservations', form);
-    snackbar.color = 'success'; snackbar.message = '預約單送出成功！'; snackbar.show = true; step.value = 1;
+    const res = await apiClient.post('/reservations', form);
+    createdReservationId.value = res.data.reservation_id;
+    successDialog.value = true;
+    
+    // 重設表單
     form.pet_id = null; form.room_id = null; form.staff_id = null; form.start_datetime = ''; form.end_datetime = '';
+    form.needs_feeding = true; form.needs_walking = false; form.needs_medication = false; form.needs_grooming = false;
+    step.value = 1;
     window.dispatchEvent(new Event('reservation-created'));
   } catch (error: any) {
     snackbar.color = 'error';
@@ -409,8 +727,187 @@ const submitReservation = async () => {
   }
 };
 
-onMounted(() => {
-  fetchPets();
+const fetchReservations = async () => {
+  try {
+    const response = await apiClient.get('/reservations');
+    reservations.value = response.data;
+  } catch (error) {
+    console.error('抓取預約資料失敗:', error);
+  }
+};
+
+const occupiedRoomIds = ref<number[]>([]);
+const occupiedGroomerIds = ref<number[]>([]);
+
+const checkAvailabilityStatus = async () => {
+  if (!form.start_datetime || !form.end_datetime) {
+    occupiedRoomIds.value = [];
+    occupiedGroomerIds.value = [];
+    return;
+  }
+  const start = new Date(form.start_datetime);
+  const end = new Date(form.end_datetime);
+  if (start >= end) {
+    occupiedRoomIds.value = [];
+    occupiedGroomerIds.value = [];
+    return;
+  }
+
+  try {
+    const res = await apiClient.get('/reservations/check-availability', {
+      params: {
+        start_time: form.start_datetime,
+        end_time: form.end_datetime
+      }
+    });
+    occupiedRoomIds.value = res.data.occupiedRoomIds || [];
+    occupiedGroomerIds.value = res.data.occupiedGroomerIds || [];
+  } catch (error) {
+    console.error('Failed to check availability:', error);
+  }
+};
+
+watch(() => [form.start_datetime, form.end_datetime], async () => {
+  await checkAvailabilityStatus();
+});
+
+const isRoomFullForPetSize = computed(() => {
+  if (!form.pet_id || rooms.value.length === 0 || !form.start_datetime || !form.end_datetime) return false;
+  const selectedPet = pets.value.find(p => p.id === form.pet_id);
+  if (!selectedPet) return false;
+  
+  const matchingRooms = rooms.value.filter(r => r.room_type === selectedPet.size);
+  if (matchingRooms.length === 0) return false;
+  
+  return matchingRooms.every(r => occupiedRoomIds.value.includes(r.id));
+});
+
+const hasRoomConflict = computed(() => {
+  if (!form.room_id || !form.start_datetime || !form.end_datetime) return false;
+  const selectedRoom = rooms.value.find(r => r.id === form.room_id);
+  if (!selectedRoom) return false;
+
+  const start = new Date(form.start_datetime).getTime();
+  const end = new Date(form.end_datetime).getTime();
+
+  return reservations.value.some((r: any) => {
+    if (r.room_number !== selectedRoom.room_number) return false;
+    if (r.status === 'Cancelled') return false;
+    const rStart = new Date(r.start_time).getTime();
+    const rEnd = new Date(r.end_time).getTime();
+    return start < rEnd && rStart < end;
+  });
+});
+
+const hasStaffConflict = computed(() => {
+  if (!form.staff_id || !form.start_datetime || !form.end_datetime) return false;
+  const staff = staffs.value.find(s => s.id === form.staff_id);
+  if (!staff) return false;
+
+  const start = new Date(form.start_datetime).getTime();
+  const end = new Date(form.end_datetime).getTime();
+
+  return reservations.value.some((r: any) => {
+    if (r.groomer_name !== staff.name) return false;
+    if (r.status === 'Cancelled') return false;
+    const rStart = new Date(r.start_time).getTime();
+    const rEnd = new Date(r.end_time).getTime();
+    return start < rEnd && rStart < end;
+  });
+});
+
+const getDetailedRoomConflictInfo = computed(() => {
+  if (!form.room_id || !form.start_datetime || !form.end_datetime) return '';
+  const selectedRoom = rooms.value.find(r => r.id === form.room_id);
+  if (!selectedRoom) return '';
+
+  const start = new Date(form.start_datetime).getTime();
+  const end = new Date(form.end_datetime).getTime();
+
+  const conflictRes = reservations.value.find((r: any) => {
+    if (r.room_number !== selectedRoom.room_number) return false;
+    if (r.status === 'Cancelled') return false;
+    const rStart = new Date(r.start_time).getTime();
+    const rEnd = new Date(r.end_time).getTime();
+    return start < rEnd && rStart < end;
+  });
+
+  if (conflictRes) {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const fmt = (dStr: string) => {
+      const d = new Date(dStr);
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+    const timeSlot = `${fmt(conflictRes.start_time)}至${fmt(conflictRes.end_time)}`;
+    return `[${conflictRes.room_number}] [${timeSlot}] 已由 [${conflictRes.pet_name}] 預約，請重新選擇時間。`;
+  }
+  return '';
+});
+
+const getDetailedStaffConflictInfo = computed(() => {
+  if (!form.staff_id || !form.start_datetime || !form.end_datetime) return '';
+  const selectedStaff = staffs.value.find(s => s.id === form.staff_id);
+  if (!selectedStaff) return '';
+
+  const start = new Date(form.start_datetime).getTime();
+  const end = new Date(form.end_datetime).getTime();
+
+  const conflictRes = reservations.value.find((r: any) => {
+    if (r.groomer_name !== selectedStaff.name) return false;
+    if (r.status === 'Cancelled') return false;
+    const rStart = new Date(r.start_time).getTime();
+    const rEnd = new Date(r.end_time).getTime();
+    return start < rEnd && rStart < end;
+  });
+
+  if (conflictRes) {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const fmt = (dStr: string) => {
+      const d = new Date(dStr);
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
+    const timeSlot = `${fmt(conflictRes.start_time)}至${fmt(conflictRes.end_time)}`;
+    return `[${conflictRes.groomer_name}] [${timeSlot}] 已由 [${conflictRes.pet_name}] 預約，請重新選擇時間。`;
+  }
+  return '';
+});
+
+const fetchSettings = async () => {
+  try {
+    const res = await apiClient.get('/settings');
+    if (res.data.business_start_time) {
+      businessHours.value.start = res.data.business_start_time;
+    }
+    if (res.data.business_end_time) {
+      businessHours.value.end = res.data.business_end_time;
+    }
+  } catch (error) {
+    console.error('Failed to load settings:', error);
+  }
+};
+
+onMounted(async () => {
+  await fetchSettings();
+  await fetchRooms();
+  await fetchPets();
+  await fetchReservations();
+  await fetchStaffs();
+
+  // 如果 URL query 中有 date 進行預填
+  if (route.query.date) {
+    const dStr = String(route.query.date);
+    form.start_datetime = `${dStr}T09:00`;
+    
+    const nextDay = new Date(dStr);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const nextDayStr = `${nextDay.getFullYear()}-${pad(nextDay.getMonth() + 1)}-${pad(nextDay.getDate())}`;
+    form.end_datetime = `${nextDayStr}T09:00`;
+  }
+
+  if (form.start_datetime && form.end_datetime) {
+    await checkAvailabilityStatus();
+  }
 });
 </script>
 
@@ -431,5 +928,19 @@ onMounted(() => {
   border-color: #E65100 !important;
   border-width: 2px !important;
   box-shadow: 0 4px 10px rgba(230, 81, 0, 0.15) !important;
+}
+
+.conflict-border {
+  border-color: #E53935 !important;
+  border-width: 2.5px !important;
+  box-shadow: 0 4px 12px rgba(229, 57, 53, 0.2) !important;
+}
+
+@keyframes red-pulse {
+  0%, 100% { border-color: #E53935; }
+  50% { border-color: #FF8A80; }
+}
+.pulsing-red-border {
+  animation: red-pulse 1.5s infinite;
 }
 </style>

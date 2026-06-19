@@ -26,6 +26,9 @@ export const login = async (req: Request, res: Response) => {
         }
 
         const employee = rows[0];
+        if (!employee.is_active) {
+            return res.status(403).json({ error: '此帳號已被停用' });
+        }
         const isPasswordValid = await bcrypt.compare(password, employee.password_hash);
 
         if (!isPasswordValid) {
@@ -58,7 +61,8 @@ export const login = async (req: Request, res: Response) => {
                 id: employee.id,
                 username: employee.username,
                 name: employee.name,
-                role: employee.role
+                role: employee.role,
+                avatar: employee.avatar
             }
         });
 
@@ -180,4 +184,235 @@ export const changePassword = async (req: AuthenticatedRequest, res: Response) =
         return res.status(500).json({ error: '修改密碼發生異常' });
     }
 };
+
+// 取得所有員工名單 (排除密碼，Admin 專用)
+export const getEmployees = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const [rows] = await pool.execute(
+            'SELECT id, username, name, role, is_reservable, is_active, created_at FROM employees ORDER BY role DESC, name ASC'
+        );
+        return res.json(rows);
+    } catch (error) {
+        console.error('Error fetching employees:', error);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+// 切換員工的可排班預約狀態 (Admin 專用)
+export const toggleEmployeeReservable = async (req: AuthenticatedRequest, res: Response) => {
+    const { id } = req.params;
+    const { is_reservable } = req.body;
+
+    try {
+        await pool.execute(
+            'UPDATE employees SET is_reservable = ? WHERE id = ?',
+            [is_reservable ? 1 : 0, id]
+        );
+
+        // 如果設定為啟用排班，自動同步建立同名的 groomer 資料以確保可被預約
+        if (is_reservable) {
+            const [empRows]: any = await pool.execute('SELECT name FROM employees WHERE id = ?', [id]);
+            if (empRows.length > 0) {
+                const empName = empRows[0].name;
+                const [groomerRows]: any = await pool.execute('SELECT id FROM groomers WHERE name = ?', [empName]);
+                if (groomerRows.length === 0) {
+                    await pool.execute(
+                        'INSERT INTO groomers (name, specialty, experience_years, rating, service_count, service_rate) VALUES (?, ?, ?, ?, ?, ?)',
+                        [empName, '專業寵物照護、基礎洗沐', 1, 5.0, 0, 500]
+                    );
+                }
+            }
+        }
+
+        // 記錄到日誌
+        const adminId = req.user?.id || null;
+        const adminName = req.user?.name || '未知管理員';
+        await pool.execute(
+            'INSERT INTO audit_logs (employee_id, action, details) VALUES (?, ?, ?)',
+            [
+                adminId,
+                'TOGGLE_EMPLOYEE_RESERVABLE',
+                `管理員【${adminName}】變更了員工 ID: ${id} 的排班預約狀態為【${is_reservable ? '啟用' : '停用'}】`
+            ]
+        );
+
+        return res.json({ success: true, message: '排班狀態更新成功！' });
+    } catch (error) {
+        console.error('Error toggling reservable status:', error);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+// 取得特定員工的預約任務名冊 (用於管理者預覽監控)
+export const getEmployeeTasks = async (req: AuthenticatedRequest, res: Response) => {
+    const { id } = req.params;
+    try {
+        const query = `
+            SELECT 
+                res.id, 
+                p.name AS pet_name, 
+                r.room_number, 
+                res.start_time, 
+                res.end_time, 
+                res.status,
+                res.needs_feeding,
+                res.needs_walking,
+                res.needs_medication,
+                res.needs_grooming,
+                res.fed_completed,
+                res.walk_completed,
+                res.medication_completed,
+                res.grooming_completed
+            FROM reservations res
+            JOIN pets p ON res.pet_id = p.id
+            LEFT JOIN rooms r ON res.room_id = r.id
+            WHERE res.groomer_id = ?
+            ORDER BY res.start_time DESC;
+        `;
+        const [rows] = await pool.execute(query, [id]);
+        return res.json(rows);
+    } catch (error) {
+        console.error('Error fetching employee tasks:', error);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+// 切換員工啟用/停用狀態 (Admin 專用)
+export const toggleEmployeeActive = async (req: AuthenticatedRequest, res: Response) => {
+    const { id } = req.params;
+    const { is_active } = req.body;
+
+    try {
+        // 管理員不能停用自己
+        if (req.user?.id === Number(id)) {
+            return res.status(400).json({ error: '您不能停用自己的帳號' });
+        }
+
+        await pool.execute(
+            'UPDATE employees SET is_active = ? WHERE id = ?',
+            [is_active ? 1 : 0, id]
+        );
+
+        // 記錄到日誌
+        const adminId = req.user?.id || null;
+        const adminName = req.user?.name || '未知管理員';
+        await pool.execute(
+            'INSERT INTO audit_logs (employee_id, action, details) VALUES (?, ?, ?)',
+            [
+                adminId,
+                'TOGGLE_EMPLOYEE_ACTIVE',
+                `管理員【${adminName}】變更了員工 ID: ${id} 的啟用狀態為【${is_active ? '啟用' : '停用'}】`
+            ]
+        );
+
+        return res.json({ success: true, message: '員工帳號狀態更新成功！' });
+    } catch (error) {
+        console.error('Error toggling active status:', error);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+// 更新登入者個人檔案 (P1-3)
+export const updateProfile = async (req: AuthenticatedRequest, res: Response) => {
+    const { name, username, avatar, oldPassword, newPassword } = req.body;
+    const employeeId = req.user?.id;
+
+    if (!employeeId) {
+        return res.status(401).json({ error: '請登入系統以執行此操作' });
+    }
+
+    if (!name || !username) {
+        return res.status(400).json({ error: '姓名與帳號為必填欄位' });
+    }
+
+    try {
+        // 1. 檢查帳號是否被其他人佔用
+        const [existing] = await pool.execute<RowDataPacket[]>(
+            'SELECT id FROM employees WHERE username = ? AND id != ?',
+            [username, employeeId]
+        );
+        if (existing.length > 0) {
+            return res.status(409).json({ error: '此帳號已被其他員工使用囉！' });
+        }
+
+        // 2. 取得原員工資料 (名字與舊密碼雜湊)
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            'SELECT name, password_hash, role FROM employees WHERE id = ?',
+            [employeeId]
+        );
+        if (rows.length === 0) {
+            return res.status(404).json({ error: '找不到該員工資料' });
+        }
+        const employee = rows[0];
+        const oldName = employee.name;
+
+        let passwordHash = employee.password_hash;
+
+        // 3. 如果有輸入新密碼，進行密碼變更校驗
+        if (newPassword) {
+            if (!oldPassword) {
+                return res.status(400).json({ error: '修改密碼請提供舊密碼以進行驗證' });
+            }
+            const isPasswordValid = await bcrypt.compare(oldPassword, employee.password_hash);
+            if (!isPasswordValid) {
+                return res.status(400).json({ error: '舊密碼輸入錯誤' });
+            }
+            if (newPassword.length < 6) {
+                return res.status(400).json({ error: '新密碼長度必須至少為 6 個字元' });
+            }
+            const salt = await bcrypt.genSalt(10);
+            passwordHash = await bcrypt.hash(newPassword, salt);
+        }
+
+        // 4. 更新 employees 表
+        await pool.execute(
+            'UPDATE employees SET name = ?, username = ?, avatar = ?, password_hash = ? WHERE id = ?',
+            [name, username, avatar || null, passwordHash, employeeId]
+        );
+
+        // 5. 同步更新 groomers 表中的美容師名稱 (若是名字有變更且有同名 groomer)
+        if (name !== oldName) {
+            await pool.execute(
+                'UPDATE groomers SET name = ? WHERE name = ?',
+                [name, oldName]
+            );
+        }
+
+        // 6. 記錄操作日誌
+        await pool.execute(
+            'INSERT INTO audit_logs (employee_id, action, details) VALUES (?, ?, ?)',
+            [employeeId, 'UPDATE_PROFILE', `員工【${name}】更新了個人檔案及帳號細節`]
+        );
+
+        // 7. 簽發新的 JWT Token
+        const token = jwt.sign(
+            {
+                id: employeeId,
+                username,
+                name,
+                role: employee.role
+            },
+            JWT_SECRET,
+            { expiresIn: '8h' }
+        );
+
+        return res.json({
+            success: true,
+            message: '個人檔案更新成功！',
+            token,
+            user: {
+                id: employeeId,
+                username,
+                name,
+                role: employee.role,
+                avatar: avatar || null
+            }
+        });
+
+    } catch (error) {
+        console.error('Update profile error:', error);
+        return res.status(500).json({ error: '更新個人檔案發生異常' });
+    }
+};
+
 

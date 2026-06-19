@@ -17,24 +17,32 @@
         style="background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(15px);"
       >
         <!-- 店家 Logo -->
-        <div class="pa-6 d-flex align-center justify-center">
-          <v-avatar color="orange-darken-2" size="40" class="text-white mr-3 elevation-1">
-            <v-icon icon="mdi-paw"></v-icon>
-          </v-avatar>
-          <div class="d-flex flex-column">
-            <span class="font-weight-black text-h6 text-brown-darken-4" style="line-height: 1.2;">FurEver Suites</span>
-            <span class="text-caption text-brown-lighten-2">寵物奢華度假村系統</span>
-          </div>
+        <div class="pa-4 d-flex align-center justify-center flex-column cursor-pointer" @click="handleLogoClick" title="回儀表板並重整">
+          <img
+            src="/pawnest_logo.jpg?v=3"
+            style="max-width: 160px; max-height: 100px; object-fit: contain;"
+            class="mb-1"
+            alt="PawNest Logo"
+          />
+          <span class="text-caption text-brown-lighten-1 font-weight-medium" style="letter-spacing: 0.05em;">寵物住宿 · 美容服務 · 餵食照護</span>
         </div>
 
         <v-divider class="mx-4 mb-4" color="brown-lighten-4"></v-divider>
 
         <!-- 員工登入資訊卡片 -->
         <div class="px-4 mb-4">
-          <v-card flat rounded="xl" color="orange-lighten-5" class="pa-4 border" style="border-color: #FFE0B2 !important;">
+          <v-card 
+            flat 
+            rounded="xl" 
+            color="orange-lighten-5" 
+            class="pa-4 border cursor-pointer employee-card hover-scale transition-swing" 
+            style="border-color: #FFE0B2 !important;"
+            @click="openProfileDialog"
+          >
             <div class="d-flex align-center">
-              <v-avatar color="orange-darken-1" size="44" class="text-white mr-3 font-weight-bold">
-                {{ currentUser?.name?.substring(0, 1) || '員' }}
+              <v-avatar color="orange-darken-1" size="44" class="text-white mr-3 font-weight-bold elevation-1">
+                <v-img v-if="currentUser?.avatar" :src="currentUser.avatar" cover></v-img>
+                <span v-else>{{ currentUser?.name?.substring(0, 1) || '員' }}</span>
               </v-avatar>
               <div class="d-flex flex-column text-left">
                 <span class="font-weight-bold text-brown-darken-4 text-body-1">{{ currentUser?.name || '未知員工' }}</span>
@@ -48,17 +56,6 @@
                   {{ currentUser?.role === 'Admin' ? '👑 老闆/管理員' : '💼 服務夥伴' }}
                 </v-chip>
               </div>
-              <!-- 修改個人密碼快捷按鈕 -->
-              <v-btn
-                v-if="currentUser"
-                icon="mdi-key-variant"
-                variant="text"
-                size="small"
-                color="orange-darken-3"
-                class="ml-auto"
-                @click="openChangePasswordDialog"
-                title="修改個人密碼"
-              ></v-btn>
             </div>
           </v-card>
         </div>
@@ -68,7 +65,7 @@
           <v-list-item
             to="/"
             prepend-icon="mdi-monitor-dashboard"
-            title="營運數據總覽"
+            title="儀表板"
             rounded="xl"
             color="orange-darken-2"
             class="mb-2 font-weight-bold text-brown-darken-3"
@@ -76,9 +73,36 @@
           ></v-list-item>
 
           <v-list-item
-            to="/booking"
+            to="/reservation"
             prepend-icon="mdi-calendar-plus"
-            title="奢華預約中心"
+            title="預約中心"
+            rounded="xl"
+            color="orange-darken-2"
+            class="mb-2 font-weight-bold text-brown-darken-3"
+          ></v-list-item>
+
+          <v-list-item
+            to="/rooms"
+            prepend-icon="mdi-bed-outline"
+            title="房間管理"
+            rounded="xl"
+            color="orange-darken-2"
+            class="mb-2 font-weight-bold text-brown-darken-3"
+          ></v-list-item>
+
+          <v-list-item
+            to="/pets"
+            prepend-icon="mdi-dog-side"
+            title="寵物檔案"
+            rounded="xl"
+            color="orange-darken-2"
+            class="mb-2 font-weight-bold text-brown-darken-3"
+          ></v-list-item>
+
+          <v-list-item
+            to="/customers"
+            prepend-icon="mdi-account-multiple-outline"
+            title="顧客管理"
             rounded="xl"
             color="orange-darken-2"
             class="mb-2 font-weight-bold text-brown-darken-3"
@@ -86,9 +110,19 @@
 
           <v-list-item
             v-if="currentUser?.role === 'Admin'"
-            to="/settings"
+            to="/resources"
+            prepend-icon="mdi-domain"
+            title="資源管理"
+            rounded="xl"
+            color="orange-darken-2"
+            class="mb-2 font-weight-bold text-brown-darken-3"
+          ></v-list-item>
+
+          <v-list-item
+            v-if="currentUser?.role === 'Admin'"
+            to="/staff"
             prepend-icon="mdi-cog-outline"
-            title="系統安全設定"
+            title="員工管理"
             rounded="xl"
             color="orange-darken-2"
             class="mb-2 font-weight-bold text-brown-darken-3"
@@ -116,6 +150,13 @@
       <!-- 右側主要內容呈現區 -->
       <v-main style="background-color: #FAF8F5;">
         <v-container fluid class="pa-6" style="max-width: 1400px; margin: 0 auto;">
+          <!-- 全域麵包屑導航 -->
+          <v-breadcrumbs :items="breadcrumbs" color="orange-darken-3" class="mb-4 pa-0 text-caption font-weight-bold">
+            <template v-slot:divider>
+              <v-icon icon="mdi-chevron-right" size="14" color="grey-lighten-1"></v-icon>
+            </template>
+          </v-breadcrumbs>
+
           <!-- 帶有轉場動畫的路由視圖 -->
           <router-view v-slot="{ Component }">
             <transition name="fade" mode="out-in">
@@ -125,75 +166,137 @@
         </v-container>
       </v-main>
 
-      <!-- 修改個人密碼對話框 -->
-      <v-dialog v-model="passwordDialog" max-width="450px" persistent>
-        <v-card rounded="xl" class="pa-4">
-          <v-card-title class="font-weight-bold text-brown-darken-4 d-flex align-center pb-2">
-            <v-icon icon="mdi-key-outline" color="orange-darken-2" class="mr-2"></v-icon>
-            修改個人登入密碼
+      <!-- 個人檔案與密碼設定對話框 -->
+      <v-dialog v-model="profileDialog" max-width="500px" persistent>
+        <v-card rounded="xl" class="pa-4 border">
+          <v-card-title class="font-weight-bold text-brown-darken-4 d-flex align-center pb-2 border-b">
+            <v-icon icon="mdi-account-cog-outline" color="orange-darken-2" class="mr-2"></v-icon>
+            修改個人帳號細節
           </v-card-title>
           
-          <v-card-text>
-            <v-form ref="passwordForm" @submit.prevent="handleChangePassword">
+          <v-card-text class="pt-4">
+            <v-form ref="profileForm" @submit.prevent="handleUpdateProfile">
+              <!-- 頭貼設定區 -->
+              <div class="d-flex flex-column align-center mb-4">
+                <v-avatar color="orange-lighten-5" size="80" class="mb-3 border elevation-2" style="border-color: #FFE0B2 !important;">
+                  <v-img v-if="profileData.avatar" :src="profileData.avatar" cover></v-img>
+                  <span v-else class="text-h4 font-weight-bold text-orange-darken-3">
+                    {{ profileData.name?.substring(0, 1) || '員' }}
+                  </span>
+                </v-avatar>
+                
+                <div class="d-flex gap-2 mb-2" style="gap: 8px;">
+                  <v-btn size="small" variant="outlined" color="orange-darken-2" rounded="pill" prepend-icon="mdi-upload" @click="triggerFileSelect">
+                    上傳照片
+                  </v-btn>
+                  <v-btn size="small" variant="text" color="grey-darken-1" rounded="pill" @click="profileData.avatar = null" v-if="profileData.avatar">
+                    清除
+                  </v-btn>
+                  <input type="file" ref="fileInput" accept="image/*" class="d-none" @change="onAvatarFileChange" />
+                </div>
+                
+                <div class="text-caption text-grey mb-3">支援 JPG/PNG，不超過 2MB</div>
+                
+                <!-- 預設卡通頭像選擇 -->
+                <div class="text-caption text-brown-darken-4 font-weight-bold mb-1">或選擇內建超萌角色頭貼：</div>
+                <div class="d-flex gap-2 justify-center" style="gap: 8px;">
+                  <v-avatar 
+                    v-for="(avatarPreset, index) in presetAvatars" 
+                    :key="index" 
+                    size="40" 
+                    class="cursor-pointer border hover-scale transition-swing"
+                    :style="profileData.avatar === avatarPreset ? 'border: 2.5px solid #E65100 !important; transform: scale(1.1);' : 'border: 1px solid rgba(0,0,0,0.1) !important;'"
+                    @click="profileData.avatar = avatarPreset"
+                  >
+                    <v-img :src="avatarPreset" cover></v-img>
+                  </v-avatar>
+                </div>
+              </div>
+
+              <v-divider class="my-4"></v-divider>
+
+              <!-- 帳號與姓名 -->
               <v-text-field
-                v-model="pwdData.oldPassword"
+                v-model="profileData.name"
+                label="真實姓名"
+                variant="outlined"
+                color="orange-darken-2"
+                rounded="lg"
+                class="mb-3"
+                required
+                :rules="[v => !!v || '請輸入真實姓名']"
+              ></v-text-field>
+
+              <v-text-field
+                v-model="profileData.username"
+                label="登入帳號"
+                variant="outlined"
+                color="orange-darken-2"
+                rounded="lg"
+                class="mb-3"
+                required
+                :rules="[v => !!v || '請輸入登入帳號']"
+              ></v-text-field>
+
+              <!-- 密碼設定 (選填) -->
+              <div class="text-subtitle-2 font-weight-bold text-brown-darken-3 mb-2 text-left">🔐 安全密碼設定 (選填，若要修改密碼請填寫)</div>
+              
+              <v-text-field
+                v-model="profileData.oldPassword"
                 label="目前的舊密碼"
                 type="password"
                 variant="outlined"
                 color="orange-darken-2"
                 rounded="lg"
                 class="mb-3"
-                required
-                :rules="[v => !!v || '請輸入舊密碼']"
+                hide-details="auto"
               ></v-text-field>
 
               <v-text-field
-                v-model="pwdData.newPassword"
+                v-model="profileData.newPassword"
                 label="設定新密碼"
                 type="password"
                 variant="outlined"
                 color="orange-darken-2"
                 rounded="lg"
                 class="mb-3"
-                required
+                hide-details="auto"
                 :rules="[
-                  v => !!v || '請輸入新密碼',
-                  v => (v && v.length >= 6) || '密碼長度需至少 6 位字元'
+                  v => !v || v.length >= 6 || '密碼長度需至少 6 位字元'
                 ]"
               ></v-text-field>
 
               <v-text-field
-                v-model="pwdData.confirmPassword"
+                v-model="profileData.confirmPassword"
                 label="再次確認新密碼"
                 type="password"
                 variant="outlined"
                 color="orange-darken-2"
                 rounded="lg"
                 class="mb-4"
-                required
+                hide-details="auto"
                 :rules="[
-                  v => !!v || '請再次輸入新密碼',
-                  v => v === pwdData.newPassword || '兩次輸入的新密碼不一致'
+                  v => v === profileData.newPassword || '兩次輸入的新密碼不一致'
                 ]"
               ></v-text-field>
 
               <v-alert
-                v-if="pwdError"
+                v-if="profileError"
                 type="error"
                 density="compact"
                 variant="tonal"
                 class="mb-4 text-left font-weight-bold"
               >
-                {{ pwdError }}
+                {{ profileError }}
               </v-alert>
 
-              <div class="d-flex justify-end">
+              <div class="d-flex justify-end pt-2 border-t">
                 <v-btn
                   variant="text"
                   rounded="pill"
                   color="grey-darken-1"
                   class="font-weight-bold mr-2"
-                  @click="closeChangePasswordDialog"
+                  @click="closeProfileDialog"
                 >
                   取消
                 </v-btn>
@@ -202,7 +305,7 @@
                   color="orange-darken-2"
                   rounded="pill"
                   class="font-weight-bold px-6 text-white"
-                  :loading="pwdLoading"
+                  :loading="profileLoading"
                 >
                   確認修改
                 </v-btn>
@@ -223,14 +326,64 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, reactive } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import axios from 'axios';
+import apiClient from './api/client';
 
 const drawer = ref(true);
 const route = useRoute();
 const router = useRouter();
 
-// 判斷是否為登入頁
 const isLoginPage = computed(() => route.path === '/login');
+
+// 麵包屑導航資料
+const breadcrumbs = computed(() => {
+  const items = [
+    {
+      title: '儀表板',
+      disabled: route.path === '/',
+      href: '/',
+    }
+  ];
+
+  if (route.path === '/reservation') {
+    items.push({
+      title: '預約中心',
+      disabled: true,
+      href: '/reservation',
+    });
+  } else if (route.path === '/rooms') {
+    items.push({
+      title: '房間管理',
+      disabled: true,
+      href: '/rooms',
+    });
+  } else if (route.path === '/pets') {
+    items.push({
+      title: '寵物檔案',
+      disabled: true,
+      href: '/pets',
+    });
+  } else if (route.path === '/customers') {
+    items.push({
+      title: '顧客管理',
+      disabled: true,
+      href: '/customers',
+    });
+  } else if (route.path === '/resources') {
+    items.push({
+      title: '資源管理',
+      disabled: true,
+      href: '/resources',
+    });
+  } else if (route.path === '/staff') {
+    items.push({
+      title: '員工管理',
+      disabled: true,
+      href: '/staff',
+    });
+  }
+
+  return items;
+});
 
 // 當前使用者資訊
 const currentUser = ref<any>(null);
@@ -245,16 +398,38 @@ watch(() => route.path, () => {
   updateCurrentUser();
 }, { immediate: true });
 
-// 修改密碼相關響應式資料
-const passwordDialog = ref(false);
-const passwordForm = ref<any>(null);
-const pwdLoading = ref(false);
-const pwdError = ref('');
-const pwdData = reactive({
+// 標題 Logo 點擊回到首頁/重整
+const handleLogoClick = () => {
+  if (route.path === '/') {
+    window.dispatchEvent(new CustomEvent('logo-refresh'));
+  } else {
+    router.push('/');
+  }
+};
+
+// 個人檔案與密碼對話框控制
+const profileDialog = ref(false);
+const profileForm = ref<any>(null);
+const profileLoading = ref(false);
+const profileError = ref('');
+const fileInput = ref<any>(null);
+
+const profileData = reactive({
+  name: '',
+  username: '',
+  avatar: null as string | null,
   oldPassword: '',
   newPassword: '',
   confirmPassword: ''
 });
+
+// 內建超萌卡通動物 SVG 頭像 presets
+const presetAvatars = [
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%23FFB74D"><circle cx="50" cy="50" r="50"/><circle cx="35" cy="45" r="6" fill="%235D4037"/><circle cx="65" cy="45" r="6" fill="%235D4037"/><path d="M38,60 Q50,72 62,60" stroke="%235D4037" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M20,30 Q35,20 40,40" stroke="%235D4037" stroke-width="8" fill="none"/><path d="M80,30 Q65,20 60,40" stroke="%235D4037" stroke-width="8" fill="none"/></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%234FC3F7"><circle cx="50" cy="50" r="50"/><circle cx="30" cy="45" r="5" fill="%2337474F"/><circle cx="70" cy="45" r="5" fill="%2337474F"/><path d="M45,60 Q50,65 55,60" stroke="%2337474F" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M25,25 L40,35" stroke="%2337474F" stroke-width="8" fill="none" stroke-linecap="round"/><path d="M75,25 L60,35" stroke="%2337474F" stroke-width="8" fill="none" stroke-linecap="round"/></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%23A5D6A7"><circle cx="50" cy="50" r="50"/><circle cx="35" cy="45" r="6" fill="%232E7D32"/><circle cx="65" cy="45" r="6" fill="%232E7D32"/><path d="M40,62 Q50,52 60,62" stroke="%232E7D32" stroke-width="5" fill="none" stroke-linecap="round"/></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="%23F48FB1"><circle cx="50" cy="50" r="50"/><circle cx="35" cy="42" r="5" fill="%23880E4F"/><circle cx="65" cy="42" r="5" fill="%23880E4F"/><path d="M42,60 Q50,68 58,60" stroke="%23880E4F" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M30,25 Q50,10 42,32" stroke="%23880E4F" stroke-width="6" fill="none"/><path d="M70,25 Q50,10 58,32" stroke="%23880E4F" stroke-width="6" fill="none"/></svg>'
+];
 
 // 提示控制
 const snackbar = reactive({
@@ -263,50 +438,85 @@ const snackbar = reactive({
   color: 'success'
 });
 
-const openChangePasswordDialog = () => {
-  pwdError.value = '';
-  pwdData.oldPassword = '';
-  pwdData.newPassword = '';
-  pwdData.confirmPassword = '';
-  passwordDialog.value = true;
+const openProfileDialog = () => {
+  profileError.value = '';
+  profileData.name = currentUser.value?.name || '';
+  profileData.username = currentUser.value?.username || '';
+  profileData.avatar = currentUser.value?.avatar || null;
+  profileData.oldPassword = '';
+  profileData.newPassword = '';
+  profileData.confirmPassword = '';
+  profileDialog.value = true;
 };
 
-const closeChangePasswordDialog = () => {
-  passwordDialog.value = false;
-  if (passwordForm.value) passwordForm.value.resetValidation();
+const closeProfileDialog = () => {
+  profileDialog.value = false;
+  if (profileForm.value) profileForm.value.resetValidation();
 };
 
-const handleChangePassword = async () => {
-  if (!pwdData.oldPassword || !pwdData.newPassword || !pwdData.confirmPassword) return;
-  if (pwdData.newPassword !== pwdData.confirmPassword) {
-    pwdError.value = '新密碼與確認密碼不一致';
-    return;
+const triggerFileSelect = () => {
+  if (fileInput.value) {
+    fileInput.value.click();
   }
-  if (pwdData.newPassword.length < 6) {
-    pwdError.value = '新密碼長度必須至少為 6 個字元';
+};
+
+const onAvatarFileChange = (e: Event) => {
+  const target = e.target as HTMLInputElement;
+  if (target.files && target.files[0]) {
+    const file = target.files[0];
+    if (file.size > 2 * 1024 * 1024) {
+      profileError.value = '頭像圖片不能超過 2MB';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target && typeof event.target.result === 'string') {
+        profileData.avatar = event.target.result;
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+};
+
+const handleUpdateProfile = async () => {
+  if (!profileData.name || !profileData.username) return;
+  if (profileData.newPassword && profileData.newPassword !== profileData.confirmPassword) {
+    profileError.value = '新密碼與確認密碼不一致';
     return;
   }
 
-  pwdLoading.value = true;
-  pwdError.value = '';
+  profileLoading.value = true;
+  profileError.value = '';
 
   try {
-    const res = await axios.post('http://localhost:3000/api/auth/change-password', {
-      oldPassword: pwdData.oldPassword,
-      newPassword: pwdData.newPassword
+    const res = await apiClient.put('/auth/profile', {
+      name: profileData.name,
+      username: profileData.username,
+      avatar: profileData.avatar,
+      oldPassword: profileData.oldPassword || undefined,
+      newPassword: profileData.newPassword || undefined
     });
 
     if (res.data.success) {
-      snackbar.message = '密碼修改成功！下次登入請使用新密碼。';
+      snackbar.message = '個人檔案與帳號資訊修改成功！';
       snackbar.color = 'success';
       snackbar.show = true;
-      closeChangePasswordDialog();
+      
+      // 更新 localStorage 與全域 state
+      localStorage.setItem('user', JSON.stringify(res.data.user));
+      if (res.data.token) {
+        localStorage.setItem('token', res.data.token);
+        apiClient.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
+      }
+      currentUser.value = res.data.user;
+      
+      closeProfileDialog();
     }
   } catch (error: any) {
-    console.error('Failed to change password:', error);
-    pwdError.value = error.response?.data?.error || '修改密碼失敗，請確認舊密碼是否輸入正確';
+    console.error('Failed to update profile:', error);
+    profileError.value = error.response?.data?.error || '修改失敗，請確認登入帳號是否已被使用。';
   } finally {
-    pwdLoading.value = false;
+    profileLoading.value = false;
   }
 };
 
@@ -318,7 +528,7 @@ const handleLogout = () => {
   }
   localStorage.removeItem('token');
   localStorage.removeItem('user');
-  delete axios.defaults.headers.common['Authorization'];
+  delete apiClient.defaults.headers.common['Authorization'];
   currentUser.value = null;
   router.push('/login');
 };
@@ -327,7 +537,7 @@ onMounted(() => {
   // 網頁重新整理時，自動載入已儲存的 Token 至 Axios
   const token = localStorage.getItem('token');
   if (token) {
-    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   }
   updateCurrentUser();
 });
@@ -342,6 +552,24 @@ onMounted(() => {
 /* 全域主體字型與轉場動畫 */
 body {
   font-family: 'Inter', 'Outfit', 'Noto Sans TC', sans-serif !important;
+  font-size: 15px !important;
+}
+
+.v-card-title {
+  font-size: 1.3rem !important;
+}
+
+.v-btn {
+  font-size: 0.95rem !important;
+  letter-spacing: 0.05em !important;
+}
+
+.text-h5 {
+  font-size: 1.45rem !important;
+}
+
+.text-h6 {
+  font-size: 1.25rem !important;
 }
 
 .fade-enter-active,

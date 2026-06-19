@@ -6,12 +6,14 @@
       elevation="8" 
       rounded="xl"
     >
-      <v-avatar color="orange-darken-2" size="64" class="mb-4 text-white elevation-2">
-        <v-icon icon="mdi-paw" size="36"></v-icon>
-      </v-avatar>
+      <img
+        src="/pawnest_logo.jpg?v=3"
+        style="max-width: 180px; max-height: 120px; object-fit: contain; display: block;"
+        class="mx-auto mb-2"
+        alt="PawNest Logo"
+      />
       
-      <h2 class="font-weight-black text-brown-darken-4 text-h5 mb-1">FurEver Suites</h2>
-      <p class="text-subtitle-2 text-brown-lighten-1 mb-6">寵物奢華度假村服務管理系統</p>
+      <p class="text-subtitle-2 text-brown-lighten-1 mb-6">寵物住宿 · 美容服務 · 餵食照護</p>
 
       <v-form @submit.prevent="handleLogin" ref="loginForm">
         <v-text-field
@@ -76,7 +78,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import axios from 'axios';
+import apiClient from '../api/client';
 
 const username = ref('');
 const password = ref('');
@@ -92,7 +94,7 @@ const handleLogin = async () => {
   errorMessage.value = '';
 
   try {
-    const response = await axios.post('http://localhost:3000/api/auth/login', {
+    const response = await apiClient.post('/auth/login', {
       username: username.value,
       password: password.value
     });
@@ -102,8 +104,8 @@ const handleLogin = async () => {
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
       
-      // 更新全域 Axios Authorization Header
-      axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+      // 更新全域 apiClient Authorization Header
+      apiClient.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
 
       // 導向首頁
       router.push('/');

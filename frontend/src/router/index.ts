@@ -2,7 +2,10 @@ import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 import Login from '../views/Login.vue';
 import DashboardView from '../views/DashboardView.vue';
 import BookingView from '../views/BookingView.vue';
+import RoomsOccupancyView from '../views/RoomsOccupancyView.vue';
+import PetsManagementView from '../views/PetsManagementView.vue';
 import Settings from '../views/Settings.vue';
+import ResourceManagementView from '../views/ResourceManagementView.vue';
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -18,14 +21,38 @@ const routes: Array<RouteRecordRaw> = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/booking',
-    name: 'Booking',
+    path: '/reservation',
+    name: 'Reservation',
     component: BookingView,
     meta: { requiresAuth: true }
   },
   {
-    path: '/settings',
-    name: 'Settings',
+    path: '/rooms',
+    name: 'Rooms',
+    component: RoomsOccupancyView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/pets',
+    name: 'Pets',
+    component: PetsManagementView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/customers',
+    name: 'Customers',
+    component: PetsManagementView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/resources',
+    name: 'ResourceManagement',
+    component: ResourceManagementView,
+    meta: { requiresAuth: true, requireAdmin: true }
+  },
+  {
+    path: '/staff',
+    name: 'Staff',
     component: Settings,
     meta: { requiresAuth: true, requireAdmin: true }
   },
