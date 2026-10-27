@@ -19,7 +19,7 @@
         <!-- 店家 Logo -->
         <div class="pa-4 d-flex align-center justify-center flex-column cursor-pointer" @click="handleLogoClick" title="回儀表板並重整">
           <img
-            src="/pawnest_logo.jpg?v=3"
+            :src="`${baseUrl}pawnest_logo.jpg?v=3`"
             style="max-width: 160px; max-height: 100px; object-fit: contain;"
             class="mb-1"
             alt="PawNest Logo"
@@ -324,6 +324,7 @@
 </template>
 
 <script setup lang="ts">
+const baseUrl = import.meta.env.BASE_URL;
 import { ref, computed, onMounted, watch, reactive } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import apiClient from './api/client';

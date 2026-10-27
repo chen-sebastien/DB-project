@@ -7,7 +7,7 @@
       rounded="xl"
     >
       <img
-        src="/pawnest_logo.jpg?v=3"
+        :src="`${baseUrl}pawnest_logo.jpg?v=3`"
         style="max-width: 180px; max-height: 120px; object-fit: contain; display: block;"
         class="mx-auto mb-2"
         alt="PawNest Logo"
@@ -76,6 +76,7 @@
 </template>
 
 <script setup lang="ts">
+const baseUrl = import.meta.env.BASE_URL;
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import apiClient from '../api/client';

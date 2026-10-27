@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import vuetify from 'vite-plugin-vuetify'
 
 export default defineConfig({
+  base: process.env.GITHUB_ACTIONS ? '/DB-project/' : '/',
   plugins: [
     vue(),
     vuetify({ autoImport: true })

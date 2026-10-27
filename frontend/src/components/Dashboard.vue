@@ -875,7 +875,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, reactive, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { useDisplay } from 'vuetify';
 import apiClient from '../api/client';
@@ -1266,20 +1266,6 @@ const fetchStats = async () => {
     console.error('Error fetching stats:', error);
   }
 };
-
-const parsedStatusStats = computed(() => {
-  const defaultStats = {
-    Confirmed: { count: 0, label: '已確認', colorClass: 'text-green-darken-2' },
-    Completed: { count: 0, label: '已完成', colorClass: 'text-grey-darken-2' },
-    Cancelled: { count: 0, label: '已取消', colorClass: 'text-red-darken-2' }
-  };
-  stats.value.statusStats.forEach(stat => {
-    if (defaultStats[stat.status as keyof typeof defaultStats]) {
-      defaultStats[stat.status as keyof typeof defaultStats].count = stat.count;
-    }
-  });
-  return Object.values(defaultStats);
-});
 
 // Care Tasks / Feeding Section
 const feedingTasks = ref<any[]>([]);

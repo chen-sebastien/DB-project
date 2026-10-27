@@ -138,7 +138,7 @@
                   style="transition: all 0.3s;"
                 >
                   <v-img
-                    src="/luxury_pet_room.png"
+                    :src="`${baseUrl}luxury_pet_room.png`"
                     height="120"
                     cover
                     class="bg-grey-lighten-3"
@@ -446,6 +446,7 @@
 </template>
 
 <script setup lang="ts">
+const baseUrl = import.meta.env.BASE_URL;
 import { ref, reactive, onMounted, watch, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import apiClient from '../api/client';
